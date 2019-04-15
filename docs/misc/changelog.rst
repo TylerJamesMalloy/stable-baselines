@@ -14,6 +14,9 @@ Pre-Release 2.5.1a0 (WIP)
 - fixed output layer name for DDPG q function, used in pop-art normalization and l2 regularization of the critic
 - added ``get_attr()``, ``env_method()`` and ``set_attr()`` methods for all VecEnv. Those
   methods now all accept ``indices`` keyword to select a subset of envs. 
+- ``GAIL``: remove mandatory matplotlib dependency and refactor as subclass of ``TRPO`` (@kantneel and @AdamGleave)
+- added ``get_attr()``, ``env_method()`` and ``set_attr()`` methods for all VecEnv. 
+  Those methods now all accept ``indices`` keyword to select a subset of envs. 
   ``set_attr`` now returns ``None`` rather than a list of ``None``. (@kantneel)
 
 
