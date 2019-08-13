@@ -95,7 +95,7 @@ def make_session(num_cpu=None, make_default=False, graph=None):
     """
     if num_cpu is None:
         num_cpu = int(os.getenv('RCALL_NUM_CPU', multiprocessing.cpu_count()))
-    tf_config = tf.ConfigProto(
+    tf_config = tf.compat.v1.ConfigProto(
         allow_soft_placement=True,
         inter_op_parallelism_threads=num_cpu,
         intra_op_parallelism_threads=num_cpu)
@@ -104,7 +104,7 @@ def make_session(num_cpu=None, make_default=False, graph=None):
     if make_default:
         return tf.InteractiveSession(config=tf_config, graph=graph)
     else:
-        return tf.Session(config=tf_config, graph=graph)
+        return tf.compat.v1.Session(config=tf_config, graph=graph)
 
 
 def single_threaded_session(make_default=False, graph=None):
@@ -187,7 +187,7 @@ def conv2d(input_tensor, num_filters, name, filter_size=(3, 3), stride=(1, 1),
     :param summary_tag: (str) image summary name, can be None for no image summary
     :return: (TensorFlow Tensor) 2d convolutional layer
     """
-    with tf.variable_scope(name):
+    with tf.compat.v1.variable_scope(name):
         stride_shape = [1, stride[0], stride[1], 1]
         filter_shape = [filter_size[0], filter_size[1], int(input_tensor.get_shape()[3]), num_filters]
 
@@ -368,7 +368,7 @@ class SetFromFlat(object):
         shapes = list(map(var_shape, var_list))
         total_size = np.sum([intprod(shape) for shape in shapes])
 
-        self.theta = theta = tf.placeholder(dtype, [total_size])
+        self.theta = theta = tf.compat.v1.placeholder(dtype, [total_size])
         start = 0
         assigns = []
         for (shape, _var) in zip(shapes, var_list):

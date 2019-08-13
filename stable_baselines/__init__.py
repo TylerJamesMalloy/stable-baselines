@@ -8,5 +8,6 @@ from stable_baselines.ppo1 import PPO1
 from stable_baselines.ppo2 import PPO2
 from stable_baselines.trpo_mpi import TRPO
 from stable_baselines.sac import SAC
+from stable_baselines.clac import CLAC
 
 __version__ = "2.5.1a0"
