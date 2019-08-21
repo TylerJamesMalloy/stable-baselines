@@ -6,6 +6,7 @@ import warnings
 
 import numpy as np
 import tensorflow as tf
+import pandas as pd
 
 from stable_baselines.a2c.utils import find_trainable_variables, total_episode_reward_logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
@@ -86,6 +87,10 @@ class SAC(OffPolicyRLModel):
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
         self.gamma = gamma
+
+        self.auto_ent_coef = False
+        if not isinstance(self.ent_coef, float):
+            self.auto_ent_coef = True
 
         self.value_fn = None
         self.graph = None
@@ -351,7 +356,7 @@ class SAC(OffPolicyRLModel):
 
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
-    def learn(self, total_timesteps, callback=None, seed=None,
+    def learn(self, total_timesteps, callback=None, seed=None, randomization = 0, 
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
@@ -368,6 +373,7 @@ class SAC(OffPolicyRLModel):
 
             start_time = time.time()
             episode_rewards = [0.0]
+            learning_results = pd.DataFrame()
             obs = self.env.reset()
             self.episode_reward = np.zeros((1,))
             ep_info_buf = deque(maxlen=100)
@@ -375,6 +381,7 @@ class SAC(OffPolicyRLModel):
             infos_values = []
 
             for step in range(total_timesteps):
+                self.env.render()
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
                     # compatibility with callbacks that have no return statement.
@@ -437,6 +444,20 @@ class SAC(OffPolicyRLModel):
                 if done:
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
+                    
+                    Model_String = "SAC"
+                    if not self.auto_ent_coef:
+                        Model_String = "SAC " + str(self.ent_coef)
+                    
+                    env_name = self.env.unwrapped.envs[0].spec.id
+
+                    ent_coef = self.ent_coef
+                    if(type(self.ent_coef) == tf.Tensor or np.isnan(ent_coef)):
+                        ent_coef = "auto"
+                    Model_String = "SAC" + str(ent_coef)
+                    d = {'Episode Reward': episode_rewards[-1], 'ent_coef': ent_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                    learning_results = learning_results.append(d, ignore_index = True)
+
                     episode_rewards.append(0.0)
 
                 if len(episode_rewards[-101:-1]) == 0:
@@ -465,7 +486,8 @@ class SAC(OffPolicyRLModel):
                     logger.dumpkvs()
                     # Reset infos:
                     infos_values = []
-            return self
+            
+            return (self, learning_results)
 
     def action_probability(self, observation, state=None, mask=None, actions=None):
         if actions is None:

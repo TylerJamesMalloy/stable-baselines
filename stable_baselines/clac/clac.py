@@ -35,7 +35,6 @@ def get_vars(scope):
 class CLAC(OffPolicyRLModel):
     """
     """
-
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
@@ -539,7 +538,7 @@ class CLAC(OffPolicyRLModel):
                     assert action.shape == self.env.action_space.shape
 
                 # If coinrunner environment
-                rescaled_action = np.array(rescaled_action, ndmin=1)
+                # rescaled_action = np.array(rescaled_action, ndmin=1)
 
                 new_obs, reward, done, info = self.env.step(rescaled_action)
 
