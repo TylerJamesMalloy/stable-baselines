@@ -15,7 +15,7 @@ from stable_baselines import SAC, CLAC
 from stable_baselines.clac.policies import MlpPolicy as clac_MlpPolicy
 from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 
-import roboschool
+#import roboschool
 
 ENVIRONMENT_NAME = 'ContinuousNChain-v0'
 TRAINING_TIMESTEPS = 5000

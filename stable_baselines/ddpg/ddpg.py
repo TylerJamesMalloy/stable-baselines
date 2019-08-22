@@ -7,6 +7,7 @@ import warnings
 
 import gym
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 import tensorflow.contrib as tc
 from mpi4py import MPI
@@ -755,7 +756,7 @@ class DDPG(OffPolicyRLModel):
             })
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=100, tb_log_name="DDPG",
-              reset_num_timesteps=True):
+              reset_num_timesteps=True, randomization=False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
@@ -775,6 +776,7 @@ class DDPG(OffPolicyRLModel):
 
             eval_episode_rewards_history = deque(maxlen=100)
             episode_rewards_history = deque(maxlen=100)
+            learning_results = pd.DataFrame()
             self.episode_reward = np.zeros((1,))
             with self.sess.as_default(), self.graph.as_default():
                 # Prepare everything.
@@ -807,7 +809,7 @@ class DDPG(OffPolicyRLModel):
                         # Perform rollouts.
                         for _ in range(self.nb_rollout_steps):
                             if total_steps >= total_timesteps:
-                                return self
+                                return self, learning_results
 
                             # Predict next action.
                             action, q_value = self._policy(obs, apply_noise=True, compute_q=True)
@@ -844,6 +846,11 @@ class DDPG(OffPolicyRLModel):
 
                             if done:
                                 # Episode done.
+                                env_name = self.env.unwrapped.envs[0].spec.id
+                                Model_String = "DDPG"
+                                d = {'Episode Reward': episode_reward, 'ent_coef': None, 'Timestep': self.num_timesteps, 'Episode Number': len(epoch_episode_rewards), 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                                learning_results = learning_results.append(d, ignore_index = True)
+
                                 epoch_episode_rewards.append(episode_reward)
                                 episode_rewards_history.append(episode_reward)
                                 epoch_episode_steps.append(episode_step)
