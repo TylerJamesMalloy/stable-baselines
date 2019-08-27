@@ -3,6 +3,8 @@ import multiprocessing
 
 import numpy as np 
 np.seterr(all=None)
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"]="2"
 import tensorflow as tf 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import pandas as pd
@@ -15,7 +17,7 @@ from stable_baselines import SAC, CLAC
 from stable_baselines.clac.policies import MlpPolicy as clac_MlpPolicy
 from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 
-import roboschool
+#import roboschool
 
 ENVIRONMENT_NAME = 'ContinuousNChain-v0'
 TRAINING_TIMESTEPS = 10000
@@ -26,6 +28,7 @@ TRAINING_MODELS = [0.2, 0.4, 0.6, 0.8, 1, 1.2, "CLAC", "SAC"]
 #TRAINING_MODELS = ["SAC"]
 POLICY_KWARGS = dict(layers=[256, 256])
 TEST_GENERALIZATION = True
+NUM_ITERATIONS = 5
 
 def train(training_tag):
     trainingData = pd.DataFrame()

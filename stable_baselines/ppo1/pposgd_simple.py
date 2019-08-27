@@ -4,6 +4,7 @@ import time
 import gym
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 from mpi4py import MPI
 
 from stable_baselines.common import Dataset, explained_variance, fmt_row, zipsame, ActorCriticRLModel, SetVerbosity, \
@@ -188,7 +189,7 @@ class PPO1(ActorCriticRLModel):
                                                        losses)
 
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=100, tb_log_name="PPO1",
-              reset_num_timesteps=True):
+              reset_num_timesteps=True, randomization=False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
@@ -209,6 +210,8 @@ class PPO1(ActorCriticRLModel):
                 timesteps_so_far = 0
                 iters_so_far = 0
                 t_start = time.time()
+
+                learning_results = pd.DataFrame()
 
                 # rolling buffer for episode lengths
                 lenbuffer = deque(maxlen=100)

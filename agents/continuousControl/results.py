@@ -10,6 +10,7 @@ Data  = pd.read_pickle("./results/data.pkl")
 
 print(Data)
 
+assert(False) 
 fig, ax = plt.subplots(nrows=1, ncols=1, sharey=False, sharex=True)
 
 #sns.lineplot(x="Timestep", y="Episode Reward", hue="Model", ax=ax, ci=68, data=Data)
