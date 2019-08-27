@@ -18,12 +18,81 @@ from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 import roboschool
 
 ENVIRONMENT_NAME = 'ContinuousNChain-v0'
-TRAINING_TIMESTEPS = 5000
+TRAINING_TIMESTEPS = 10000
+TRAINING_ITERATIONS = 5
+CURRENT_ITERATION = 1
+SAVE_AGENTS = True 
+TRAINING_MODELS = [0.2, 0.4, 0.6, 0.8, 1, 1.2, "CLAC", "SAC"]
+#TRAINING_MODELS = ["SAC"]
 POLICY_KWARGS = dict(layers=[256, 256])
+TEST_GENERALIZATION = True
 
-env = gym.make(ENVIRONMENT_NAME, alpha=10, beta=10, action_power = 6, max_step = 25)
-env = DummyVecEnv([lambda: env]) 
+def train(training_tag):
+    trainingData = pd.DataFrame()
+    env = gym.make(ENVIRONMENT_NAME)
+    env = DummyVecEnv([lambda: env]) 
 
-model = CLAC(clac_MlpPolicy, env, verbose=1,  policy_kwargs = POLICY_KWARGS)
-(model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS, log_interval=50)
-print(learning_results)
+    if(isinstance(training_tag, float)):
+        model = CLAC(clac_MlpPolicy, env, ent_coef=training_tag, verbose=1, policy_kwargs = POLICY_KWARGS)
+        (model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS)
+        trainingData = trainingData.append(learning_results, ignore_index=True)
+        
+        file_tag = str(training_tag).replace(".", "p")
+        if(SAVE_AGENTS):   
+            model.save("models/CLAC_" + ENVIRONMENT_NAME + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+        
+        env.reset()
+        del model
+
+        model = SAC(sac_MlpPolicy, env, ent_coef=training_tag, verbose=1, policy_kwargs = POLICY_KWARGS)
+        (model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS)
+        trainingData = trainingData.append(learning_results, ignore_index=True)
+        
+        file_tag = str(training_tag).replace(".", "p")
+        if(SAVE_AGENTS):   
+            model.save("models/SAC_" + ENVIRONMENT_NAME + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+        
+        env.reset()
+        del model
+
+    if(training_tag == "CLAC"):
+        model = CLAC(clac_MlpPolicy, env, verbose=1, policy_kwargs = POLICY_KWARGS)
+        (model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS)
+        
+        trainingData = trainingData.append(learning_results, ignore_index=True)
+
+        if(SAVE_AGENTS):
+            model.save("models/CLAC_" + ENVIRONMENT_NAME + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+
+        env.reset()
+        del model
+    
+    if(training_tag == "SAC"):
+        model = SAC(sac_MlpPolicy, env, verbose=1, policy_kwargs = POLICY_KWARGS)
+        (model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS)
+
+        trainingData = trainingData.append(learning_results, ignore_index=True)
+
+        if(SAVE_AGENTS):
+            model.save("models/SAC_" + ENVIRONMENT_NAME + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+
+        env.reset()
+        del model
+    
+    return trainingData
+
+    
+if __name__ == "__main__":
+    pool = ThreadPool(len(TRAINING_MODELS)) #ensure that the length of the training models does not exceed the cpu number: multiprocessing.cpu_count()
+    all_results = pd.DataFrame()            
+
+    for _ in range(TRAINING_ITERATIONS):
+        my_array = TRAINING_MODELS
+        results = pool.map(train, my_array)
+        
+        for result in results:
+            all_results = all_results.append(result, ignore_index=True)
+        
+        CURRENT_ITERATION += 1
+
+    all_results.to_pickle("results/data.pkl")

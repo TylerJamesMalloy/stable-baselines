@@ -17,7 +17,19 @@ from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 
 import roboschool
 
-ENVIRONMENT_NAME = 'RoboschoolAnt-v1'
+# Environments 
+"""
+RoboschoolInvertedPendulum-v1
+RoboschoolInvertedPendulumSwingup-v1
+RoboschoolInvertedDoublePendulum-v1
+RoboschoolHopper-v1
+RoboschoolWalker2d-v1
+RoboschoolHalfCheetah-v1
+RoboschoolAnt-v1
+RoboschoolHumanoid-v1
+"""
+
+ENVIRONMENT_NAME = 'RoboschoolHumanoid-v1'
 TRAINING_TIMESTEPS = 10000
 TRAINING_ITERATIONS = 1
 CURRENT_ITERATION = 1

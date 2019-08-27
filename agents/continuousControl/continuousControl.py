@@ -17,14 +17,15 @@ from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 
 import roboschool
 
-ENVIRONMENT_NAME = 'RoboschoolAnt-v1'
-TRAINING_TIMESTEPS = 1000000
+ENVIRONMENT_NAME = 'RoboschoolInvertedPendulum-v1'
+TRAINING_TIMESTEPS = 200
 TRAINING_ITERATIONS = 5
 CURRENT_ITERATION = 1
 SAVE_AGENTS = True 
-#TRAINING_MODELS = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, "CLAC", "SAC"]
-TRAINING_MODELS = ["SAC"]
+TRAINING_MODELS = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, "CLAC", "SAC"]
+#TRAINING_MODELS = ["SAC"]
 POLICY_KWARGS = dict(layers=[256, 256])
+TEST_GENERALIZATION = True
 
 def train(training_tag):
     trainingData = pd.DataFrame()
