@@ -3,6 +3,8 @@ import multiprocessing
 
 import numpy as np 
 np.seterr(all=None)
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"]="2"
 import tensorflow as tf 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import pandas as pd
@@ -20,10 +22,16 @@ from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 ENVIRONMENT_NAME = 'ContinuousNChain-v0'
 TRAINING_TIMESTEPS = 5000
 POLICY_KWARGS = dict(layers=[256, 256])
+NUM_ITERATIONS = 5
 
 env = gym.make(ENVIRONMENT_NAME, alpha=10, beta=10, action_power = 6, max_step = 25)
 env = DummyVecEnv([lambda: env]) 
 
-model = CLAC(clac_MlpPolicy, env, verbose=1,  policy_kwargs = POLICY_KWARGS)
-(model, learning_results) = model.learn(total_timesteps=TRAINING_TIMESTEPS, log_interval=50)
+for _ in range(NUM_ITERATIONS):
+    model = CLAC(clac_MlpPolicy, env, verbose=1, ent_coef=0.8, policy_kwargs = POLICY_KWARGS)
+    model.learn(total_timesteps=TRAINING_TIMESTEPS, log_interval=50)
+
+    model = CLAC(clac_MlpPolicy, env, verbose=1, ent_coef=0.4,  policy_kwargs = POLICY_KWARGS)
+    model.learn(total_timesteps=TRAINING_TIMESTEPS, log_interval=50)
+
 print(learning_results)

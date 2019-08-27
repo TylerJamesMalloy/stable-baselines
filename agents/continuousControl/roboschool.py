@@ -11,7 +11,6 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import pandas as pd
 
-import roboschool
 import gym
 
 from stable_baselines.common.policies import MlpPolicy
@@ -22,25 +21,22 @@ from stable_baselines.clac.policies import MlpPolicy as clac_MlpPolicy
 from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
 from stable_baselines.ddpg.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise, AdaptiveParamNoiseSpec
 
-ENVIRONMENT_NAME = 'RoboschoolInvertedPendulum-v1'
-TRAINING_STEPS = 1
-TRAINING_TIMESTEPS = 20000
-TESTING_TIMESTEPS = 20000
+import roboschool
+
+ENVIRONMENT_NAME = 'RoboschoolWalker2d-v1'
+TRAINING_STEPS = 10
+TRAINING_TIMESTEPS = 25000
+TESTING_TIMESTEPS = 25000
 TRAINING_ITERATIONS = 5
 CURRENT_ITERATION = 1
 SAVE_AGENTS = False 
 SAVE_FINAL_AGENT = True 
-TRAINING_MODELS = [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, "A2C", "DDPG", "PPO1"]
+TRAINING_MODELS = ["SAC", "CLAC", "A2C", "DDPG", "PPO1"]
 POLICY_KWARGS = dict(layers=[256, 256])
 
 #env = gym.make(ENVIRONMENT_NAME)
 #env = DummyVecEnv([lambda: env])
-MAX_ENV_STEPS = 200
-
-env = gym.make(ENVIRONMENT_NAME)
-env = DummyVecEnv([lambda: env]) 
-data = pd.DataFrame()
-env._max_episode_steps = MAX_ENV_STEPS
+#MAX_ENV_STEPS = 200
 
 def test(model, model_string, ent_coef, env, randomization, timestep):
     obs = env.reset()
@@ -68,6 +64,13 @@ def test(model, model_string, ent_coef, env, randomization, timestep):
 
 
 def train(training_tag):
+    env = gym.make(ENVIRONMENT_NAME)
+    env = DummyVecEnv([lambda: env]) 
+    data = pd.DataFrame()
+    env._max_episode_steps = MAX_ENV_STEPS
+
+
+
     if(isinstance(training_tag, float)):
         model = CLAC(clac_MlpPolicy, env, ent_coef=training_tag, verbose=1, policy_kwargs = POLICY_KWARGS)
         
@@ -76,11 +79,11 @@ def train(training_tag):
             #data = data.append(learning_results, ignore_index=True)
             data = data.append(test(model, "CLAC" + str(training_tag), training_tag, env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "CLAC" + str(training_tag), training_tag, env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "CLAC" + str(training_tag), training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "CLAC" + str(training_tag), training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
             
             file_tag = str(training_tag).replace(".", "p")
             if(SAVE_AGENTS):   
-                model.save("pendulums/CLAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/CLAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -94,11 +97,11 @@ def train(training_tag):
 
             data = data.append(test(model, "SAC" + str(training_tag), training_tag, env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "SAC" + str(training_tag), training_tag, env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "SAC" + str(training_tag), training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "SAC" + str(training_tag), training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
             
             file_tag = str(training_tag).replace(".", "p")
             if(SAVE_AGENTS):   
-                model.save("pendulums/SAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/SAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_t" + str(file_tag) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
             
         env.reset()
         del model
@@ -113,10 +116,10 @@ def train(training_tag):
 
             data = data.append(test(model, "CLAC", "auto", env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "CLAC", "auto", env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "CLAC", "auto", env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "CLAC", "auto", env, 2, (step + 1) * TRAINING_TIMESTEPS))
 
             if(SAVE_AGENTS):
-                model.save("pendulums/CLAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/CLAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -131,10 +134,10 @@ def train(training_tag):
 
             data = data.append(test(model, "SAC", "auto", env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "SAC", "auto", env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "SAC", "auto", env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "SAC", "auto", env, 2, (step + 1) * TRAINING_TIMESTEPS))
 
             if(SAVE_AGENTS):
-                model.save("pendulums/SAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/SAC_" + ENVIRONMENT_NAME + "_s" + str(step) + "_auto" + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -154,10 +157,10 @@ def train(training_tag):
 
             data = data.append(test(model, "DDPG", None, env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "DDPG", None, env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "DDPG", None, env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "DDPG", None, env, 2, (step + 1) * TRAINING_TIMESTEPS))
             
             if(SAVE_AGENTS):
-                model.save("pendulums/DDPG_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/DDPG_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -170,10 +173,10 @@ def train(training_tag):
 
             data = data.append(test(model, "PPO1", training_tag, env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "PPO1", training_tag, env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "PPO1", training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "PPO1", training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
             
             if(SAVE_AGENTS):
-                model.save("pendulums/PPO1_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/PPO1_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -186,10 +189,10 @@ def train(training_tag):
 
             data = data.append(test(model, "A2C", training_tag, env, False, (step + 1) * TRAINING_TIMESTEPS))
             #data = data.append(test(model, "A2C", training_tag, env, 1, (step + 1) * TRAINING_TIMESTEPS))
-            data = data.append(test(model, "A2C", training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
+            #data = data.append(test(model, "A2C", training_tag, env, 2, (step + 1) * TRAINING_TIMESTEPS))
             
             if(SAVE_AGENTS):
-                model.save("pendulums/A2C_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
+                model.save("models/A2C_" + ENVIRONMENT_NAME + "_s" + str(step) + "_i" + str(CURRENT_ITERATION) + "_ts" + str(TRAINING_TIMESTEPS))
 
         env.reset()
         del model
@@ -210,6 +213,6 @@ if __name__ == "__main__":
         
         CURRENT_ITERATION += 1
 
-    all_results.to_pickle("results/pendulum.pkl")
+    all_results.to_pickle("results/RoboschoolHopper.pkl")
 
     print(all_results)

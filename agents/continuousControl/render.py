@@ -7,6 +7,7 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import pandas as pd
 
+import roboschool
 import gym
 
 from stable_baselines.common.policies import MlpPolicy
@@ -14,8 +15,6 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import SAC, CLAC
 from stable_baselines.clac.policies import MlpPolicy as clac_MlpPolicy
 from stable_baselines.sac.policies import MlpPolicy as sac_MlpPolicy
-
-import roboschool
 
 ENVIRONMENT_NAME = 'RoboschoolAnt-v1'
 TRAINING_TIMESTEPS = 10000
