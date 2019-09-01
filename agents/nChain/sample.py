@@ -18,7 +18,7 @@ sns.set(font_scale=1.5)
 
 plt.style.use('fivethirtyeight')
 
-RESULTS_FOLDER = "./models/"
+RESULTS_FOLDER = "./t100000/models/"
 NUM_TRAINING_STEPS = 100000
 
 import gym 
