@@ -503,7 +503,7 @@ class SAC(OffPolicyRLModel):
 
         return np.zeros((observation.shape[0], 1), dtype=np.float32)
 
-    def predict(self, observation, state=None, mask=None, deterministic=True):
+    def predict(self, observation, state=None, mask=None, deterministic=False):
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 

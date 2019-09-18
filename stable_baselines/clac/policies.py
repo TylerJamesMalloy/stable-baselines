@@ -3,8 +3,6 @@ import numpy as np
 from gym.spaces import Box
 
 from stable_baselines.common.policies import BasePolicy, nature_cnn, register_policy
-
-# Imports by Tyler to allow for Discrete action spaces
 from stable_baselines.common.distributions import make_proba_dist_type
 from gym.spaces import Discrete
 
@@ -85,8 +83,6 @@ def apply_squashing_func(mu_, pi_, logp_pi):
     logp_pi -= tf.reduce_sum(tf.log(1 - policy ** 2 + EPS), axis=1)
     return deterministic_policy, policy, logp_pi
 
-
-# Added by Tyler Malloy to enable discrete action spaces in Soft-Actor Critic 
 class ActorCriticPolicy(BasePolicy):
     """
     Policy object that implements actor critic
@@ -146,7 +142,7 @@ class ActorCriticPolicy(BasePolicy):
                 self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.n, activation=None)
             else:
                 self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
-            # Important difference with SAC and other algo such as PPO:
+            # Important difference with CLAC and other algo such as PPO:
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
             if(self.is_discrete):
                 log_std = tf.layers.dense(pi_h, self.ac_space.n, activation=None)
@@ -194,7 +190,7 @@ class ActorCriticPolicy(BasePolicy):
             phi_h = mlp(phi_h,  self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
             self.phi_act_mu = phi_mu_ = tf.layers.dense(phi_h, 1, activation=tf.nn.softmax)
-            # Important difference with SAC and other algo such as PPO:
+            # Important difference with CLAC and other algo such as PPO:
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
             phi_log_std = tf.layers.dense(phi_h, 1, activation=tf.nn.softmax)
         
@@ -262,7 +258,7 @@ class ActorCriticPolicy(BasePolicy):
 
 class CLACPolicy(BasePolicy):
     """
-    Policy object that implements a SAC-like actor critic
+    Policy object that implements a CLAC-like actor critic
 
     :param sess: (TensorFlow session) The current TensorFlow session
     :param ob_space: (Gym Space) The observation space of the environment
@@ -394,7 +390,7 @@ class FeedForwardPolicy(CLACPolicy):
             pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
             self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
-            # Important difference with SAC and other algo such as PPO:
+            # Important difference with CLAC and other algo such as PPO:
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
             log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
 
