@@ -36,15 +36,13 @@ Can I use?
 -  Multi processing: ❌
 -  Gym spaces:
 
+| Space        | Action           | Observation  |
+| ------------- |:-------------:| -----:|
+| Discrete      | ❌ | ✔️ |
+| Box      | ✔️      |   ✔️ |
+| MultiDiscrete | ❌      |    ✔️ |
+| MultiBinary | ❌      |    ✔️ |
 
-============= ====== ===========
-Space         Action Observation
-============= ====== ===========
-Discrete      ❌      ✔️
-Box           ✔️       ✔️
-MultiDiscrete ❌      ✔️
-MultiBinary   ❌      ✔️
-============= ====== ===========
 
 Example
 -------
