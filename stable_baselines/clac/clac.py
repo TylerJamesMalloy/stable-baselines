@@ -65,7 +65,7 @@ class CLAC(OffPolicyRLModel):
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
-        Note: this has no effect on SAC logging for now
+        Note: this has no effect on CLAC logging for now
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_starts=100, train_freq=1, batch_size=256,
