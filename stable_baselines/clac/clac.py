@@ -41,8 +41,7 @@ class CLAC(OffPolicyRLModel):
     (https://github.com/rail-berkeley/softlearning/) and from the Stable-Baseliens implementation 
     (https://github.com/hill-a/stable-baselines/tree/master/stable_baselines/sac)
 
-    Paper: In Preperation for ICML 2020
-    Introduction to CLAC: https://github.com/TylerJamesMalloy/stable-baselines/tree/master/stable_baselines/clac
+    Paper: In Preperation for ICLR 2020
 
     :param policy: (CLACPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, LnMlpPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
