@@ -442,6 +442,7 @@ class Runner(AbstractEnvRunner):
         super().__init__(env=env, model=model, n_steps=n_steps)
         self.lam = lam
         self.gamma = gamma
+        self.action_masks = []
 
     def run(self):
         """
@@ -462,9 +463,8 @@ class Runner(AbstractEnvRunner):
         mb_states = self.states
         ep_infos = []
         for _ in range(self.n_steps):
-            actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones)
+            actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_masks)
             mb_obs.append(self.obs.copy())
-            mb_actions.append(actions)
             mb_values.append(values)
             mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
@@ -473,10 +473,41 @@ class Runner(AbstractEnvRunner):
             if isinstance(self.env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
             self.obs[:], rewards, self.dones, infos = self.env.step(clipped_actions)
-            for info in infos:
-                maybe_ep_info = info.get('episode')
+            current_actions = []
+            self.action_masks.clear()
+            for index in range(len(infos)):
+                maybe_ep_info = infos[index].get('episode')
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
+
+                # Sometimes the policy network chooses action 1, but the environment does not allow this action, 
+                # action 2 is executed. Therefore, we must update the correct action.
+                # In the first step, the action mask cannot be applied.
+                env_current_actions = infos[index].get('current_actions')
+                if isinstance(self.env.action_space, gym.spaces.MultiDiscrete) and \
+                        np.shape(env_current_actions) == np.shape(actions[index]):
+                    env_current_actions = np.array(env_current_actions)
+                    current_actions.append(env_current_actions)
+                elif isinstance(self.env.action_space, gym.spaces.Discrete) and \
+                        type(env_current_actions) == int:
+                    current_actions.append(np.int64(env_current_actions))
+                else:
+                    current_actions.append(actions[index])
+                    
+                # actoin mask
+                env_action_mask = infos[index].get('action_mask')
+                if isinstance(self.env.action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
+                    self.action_masks.append(np.concatenate(env_action_mask))
+                elif isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                    self.action_masks.append(np.ones(sum(self.env.action_space.nvec)))
+                elif isinstance(self.env.action_space, gym.spaces.Discrete) and env_action_mask is not None:
+                    self.action_masks.append(env_action_mask)
+                elif isinstance(self.env.action_space, gym.spaces.Discrete):
+                    self.action_masks.append(np.ones(self.env.action_space.n))
+
+            current_actions = np.array(current_actions)
+            mb_actions.append(current_actions)
+
             mb_rewards.append(rewards)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)

@@ -43,8 +43,10 @@ def validate_probtype(probtype, pdparam):
     # Check to see if mean negative log likelihood == differential entropy
     mval = np.repeat(pdparam[None, :], number_samples, axis=0)
     mval_ph = probtype.param_placeholder([number_samples])
+    action_mask_ph = probtype.param_placeholder([number_samples])
+    action_mask_ph = tf.placeholder_with_default(tf.zeros_like(action_mask_ph), shape=np.shape(action_mask_ph))
     xval_ph = probtype.sample_placeholder([number_samples])
-    proba_distribution = probtype.proba_distribution_from_flat(mval_ph)
+    proba_distribution = probtype.proba_distribution_from_flat(mval_ph, action_mask_ph=action_mask_ph)
     calcloglik = tf_util.function([xval_ph, mval_ph], proba_distribution.logp(xval_ph))
     calcent = tf_util.function([mval_ph], proba_distribution.entropy())
     xval = tf.get_default_session().run(proba_distribution.sample(), feed_dict={mval_ph: mval})
@@ -56,7 +58,9 @@ def validate_probtype(probtype, pdparam):
 
     # Check to see if kldiv[p,q] = - ent[p] - E_p[log q]
     mval2_ph = probtype.param_placeholder([number_samples])
-    pd2 = probtype.proba_distribution_from_flat(mval2_ph)
+    action_mask_ph2 = probtype.param_placeholder([number_samples])
+    action_mask_ph2 = tf.placeholder_with_default(tf.zeros_like(action_mask_ph2), shape=np.shape(action_mask_ph2))
+    pd2 = probtype.proba_distribution_from_flat(mval2_ph, action_mask_ph=action_mask_ph2)
     tmp = pdparam + np.random.randn(pdparam.size) * 0.1
     mval2 = np.repeat(tmp[None, :], number_samples, axis=0)
     calckl = tf_util.function([mval_ph, mval2_ph], proba_distribution.kl(pd2))

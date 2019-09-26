@@ -85,7 +85,7 @@ class ProbabilityDistributionType(object):
         """
         raise NotImplementedError
 
-    def proba_distribution_from_flat(self, flat):
+    def proba_distribution_from_flat(self, flat, **kwargs):
         """
         Returns the probability distribution from flat probabilities
         flat: flattened vector of parameters of probability distribution
@@ -95,7 +95,7 @@ class ProbabilityDistributionType(object):
         """
         return self.probability_distribution_class()(flat)
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
         """
         returns the probability distribution from latent values
 
@@ -164,10 +164,15 @@ class CategoricalProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return CategoricalProbabilityDistribution
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
+    def proba_distribution_from_flat(self, flat, **kwargs):
+        action_mask_ph = kwargs.get('action_mask_ph')
+        return CategoricalProbabilityDistribution(flat, action_mask=action_mask_ph)
+
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
         pdparam = linear(pi_latent_vector, 'pi', self.n_cat, init_scale=init_scale, init_bias=init_bias)
         q_values = linear(vf_latent_vector, 'q', self.n_cat, init_scale=init_scale, init_bias=init_bias)
-        return self.proba_distribution_from_flat(pdparam), pdparam, q_values
+        action_mask_ph = kwargs.get('action_mask_ph')
+        return self.proba_distribution_from_flat(pdparam, action_mask_ph=action_mask_ph), pdparam, q_values
 
     def param_shape(self):
         return [self.n_cat]
@@ -194,13 +199,15 @@ class MultiCategoricalProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return MultiCategoricalProbabilityDistribution
 
-    def proba_distribution_from_flat(self, flat):
-        return MultiCategoricalProbabilityDistribution(self.n_vec, flat)
+    def proba_distribution_from_flat(self, flat, **kwargs):
+        action_mask_ph = kwargs.get('action_mask_ph')
+        return MultiCategoricalProbabilityDistribution(self.n_vec, flat, action_mask=action_mask_ph)
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
         pdparam = linear(pi_latent_vector, 'pi', sum(self.n_vec), init_scale=init_scale, init_bias=init_bias)
         q_values = linear(vf_latent_vector, 'q', sum(self.n_vec), init_scale=init_scale, init_bias=init_bias)
-        return self.proba_distribution_from_flat(pdparam), pdparam, q_values
+        action_mask_ph = kwargs.get('action_mask_ph')
+        return self.proba_distribution_from_flat(pdparam, action_mask_ph=action_mask_ph), pdparam, q_values
 
     def param_shape(self):
         return [sum(self.n_vec)]
@@ -224,7 +231,7 @@ class DiagGaussianProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return DiagGaussianProbabilityDistribution
 
-    def proba_distribution_from_flat(self, flat):
+    def proba_distribution_from_flat(self, flat, **kwargs):
         """
         returns the probability distribution from flat probabilities
 
@@ -233,7 +240,7 @@ class DiagGaussianProbabilityDistributionType(ProbabilityDistributionType):
         """
         return self.probability_distribution_class()(flat)
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
         mean = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
         logstd = tf.get_variable(name='pi/logstd', shape=[1, self.size], initializer=tf.zeros_initializer())
         pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
@@ -262,7 +269,7 @@ class BernoulliProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return BernoulliProbabilityDistribution
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
         pdparam = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
         q_values = linear(vf_latent_vector, 'q', self.size, init_scale=init_scale, init_bias=init_bias)
         return self.proba_distribution_from_flat(pdparam), pdparam, q_values
@@ -278,19 +285,24 @@ class BernoulliProbabilityDistributionType(ProbabilityDistributionType):
 
 
 class CategoricalProbabilityDistribution(ProbabilityDistribution):
-    def __init__(self, logits):
+    def __init__(self, logits, action_mask):
         """
         Probability distributions from categorical input
 
         :param logits: ([float]) the categorical logits input
         """
         self.logits = logits
+        self.action_mask = action_mask
 
     def flatparam(self):
         return self.logits
 
     def mode(self):
-        return tf.argmax(self.logits, axis=-1)
+        # mask: 0 is valid action, -inf is invalid action
+        # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
+        logits = self.logits
+        logits = tf.add(logits, self.action_mask)
+        return tf.argmax(logits, axis=-1)
 
     def neglogp(self, x):
         # Note: we can't use sparse_softmax_cross_entropy_with_logits because
@@ -321,7 +333,12 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         # Gumbel-max trick to sample
         # a categorical distribution (see http://amid.fish/humble-gumbel)
         uniform = tf.random_uniform(tf.shape(self.logits), dtype=self.logits.dtype)
-        return tf.argmax(self.logits - tf.log(-tf.log(uniform)), axis=-1)
+        probability = self.logits - tf.log(-tf.log(uniform))
+
+        # mask: 0 is valid action, -inf is invalid action
+        # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
+        probability = tf.add(probability, self.action_mask)
+        return tf.argmax(probability, axis=-1)
 
     @classmethod
     def fromflat(cls, flat):
@@ -335,7 +352,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
 
 class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
-    def __init__(self, nvec, flat):
+    def __init__(self, nvec, flat, action_mask):
         """
         Probability distributions from multicategorical input
 
@@ -343,7 +360,8 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
         :param flat: ([float]) the categorical logits input
         """
         self.flat = flat
-        self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1)))
+        self.action_mask = action_mask
+        self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1), tf.split(action_mask, nvec, axis=-1)))
 
     def flatparam(self):
         return self.flat
