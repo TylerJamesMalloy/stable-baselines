@@ -23,7 +23,7 @@ def test_action_mask(model_class):
 
     :param model_class: (BaseRLModel) A RL Model
     """
-    env = DummyVecEnv([lambda: DummyActionMaskEnv()] * 4)
+    env = DummyVecEnv([lambda: DummyActionMaskEnv()])
 
     model = model_class("MlpPolicy", env)
 

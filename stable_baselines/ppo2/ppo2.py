@@ -12,7 +12,6 @@ from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
-from stable_baselines.common.policies import create_dummy_action_mask
 from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
@@ -245,8 +244,8 @@ class PPO2(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, learning_rate, cliprange, obs, returns, masks, actions, values, neglogpacs, update,
-                    writer, states=None, cliprange_vf=None, action_masks=None):
+    def _train_step(self, learning_rate, cliprange, obs, returns, masks, actions, values, neglogpacs, action_masks,
+                    update, writer, states=None, cliprange_vf=None):
         """
         Training of PPO2 Algorithm
 
@@ -271,19 +270,14 @@ class PPO2(ActorCriticRLModel):
                   self.advs_ph: advs, self.rewards_ph: returns,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
                   self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
-        if len(action_masks) == 0:
-            action_masks = None
-
-        if action_masks is not None:
-            action_masks = np.reshape(action_masks, (self.n_batch // self.nminibatches, self.train_model.ac_space.n))
 
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
-            if action_masks is None:
-                action_masks = create_dummy_action_mask(self.train_model.ac_space, states.shape[0] * self.n_steps)
-        if action_masks is None:
-            action_masks = create_dummy_action_mask(self.train_model.ac_space, self.n_batch // self.nminibatches)
+            if len(action_masks) == 0:
+                action_masks = self.train_model.action_mask_check(None, states.shape[0] * self.n_steps)
+        if len(action_masks) == 0:
+            action_masks = self.train_model.action_mask_check(None, self.n_batch // self.nminibatches)
         td_map[self.train_model.action_mask_ph] = action_masks
         if cliprange_vf is not None and cliprange_vf >= 0:
             td_map[self.clip_range_vf_ph] = cliprange_vf
@@ -476,10 +470,10 @@ class Runner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs, mb_action_masks = [], [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-        action_mask = None
+
         for _ in range(self.n_steps):
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones,
-                                                                       action_mask=action_mask)
+                                                                       action_mask=self.action_mask)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
@@ -495,9 +489,9 @@ class Runner(AbstractEnvRunner):
                     ep_infos.append(info.get('episode'))
                 # Did the env tell us what actions are valid?
                 if info.get('valid_actions') is not None:
-                    action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                    mb_action_masks.append(action_mask)
-                    action_mask = np.expand_dims(action_mask, axis=0)
+                    self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+                    mb_action_masks.append(self.action_mask)
+                    self.action_mask = np.expand_dims(self.action_mask, axis=0)
                 else:
                     # otherwise, assume all actions are valid
                     self.model.action_mask = None

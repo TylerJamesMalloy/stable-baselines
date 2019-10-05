@@ -11,7 +11,6 @@ from stable_baselines.acer.buffer import Buffer
 from stable_baselines.common import ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
-from stable_baselines.common.policies import create_dummy_action_mask
 
 
 def strip(var, n_envs, n_steps, flat=False):
@@ -435,9 +434,8 @@ class ACER(ActorCriticRLModel):
         td_map = {self.train_model.obs_ph: obs, self.polyak_model.obs_ph: obs, self.action_ph: actions,
                   self.reward_ph: rewards, self.done_ph: dones, self.mu_ph: mus, self.learning_rate_ph: cur_lr}
 
-        num_steps = self.train_model.action_mask_ph.shape[0]
         if len(action_masks) == 0:
-            action_masks = create_dummy_action_mask(self.train_model.ac_space, num_steps)
+            action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
 
         if states is not None:
             td_map[self.train_model.states_ph] = states
@@ -632,11 +630,10 @@ class _Runner(AbstractEnvRunner):
         enc_obs = [self.obs]
         mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards, mb_action_masks = [], [], [], [], [], []
         ep_infos = []
-        action_mask = None
 
         for _ in range(self.n_steps):
-            actions, _, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=action_mask)
-            mus = self.model.proba_step(self.obs, self.states, self.dones, action_mask=action_mask)
+            actions, _, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_mask)
+            mus = self.model.proba_step(self.obs, self.states, self.dones)
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_mus.append(mus)
@@ -649,12 +646,11 @@ class _Runner(AbstractEnvRunner):
             for info in infos:
                 # Did the env tell us what actions are valid?
                 if info.get('valid_actions') is not None:
-                    action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                    mb_action_masks.append(action_mask)
-                    action_mask = np.expand_dims(action_mask, axis=0)
+                    self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+                    mb_action_masks.append(self.action_mask)
+                    self.action_mask = np.expand_dims(self.action_mask, axis=0)
                 else:
-                    # otherwise, assume all actions are valid
-                    action_mask = None
+                    self.action_mask = None
             # states information for statefull models like LSTM
             self.states = states
             self.dones = dones

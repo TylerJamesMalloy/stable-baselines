@@ -8,7 +8,6 @@ import tensorflow as tf
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, tf_util, ActorCriticRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
-from stable_baselines.common.policies import create_dummy_action_mask
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse, \
     total_episode_reward_logger
@@ -172,7 +171,7 @@ class A2C(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, obs, states, rewards, masks, actions, values, update, writer=None, action_masks=None):
+    def _train_step(self, obs, states, rewards, masks, actions, values, action_masks, update, writer=None):
         """
         applies a training step to the model
 
@@ -195,15 +194,15 @@ class A2C(ActorCriticRLModel):
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
-        if len(action_masks) == 0:
-            action_masks = None
+
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
-            if action_masks is None:
-                action_masks = create_dummy_action_mask(self.train_model.ac_space, states.shape[0] * self.n_steps)
-        if action_masks is None:
-            action_masks = create_dummy_action_mask(self.train_model.ac_space, self.n_steps * self.n_envs)
+            if len(action_masks) == 0:
+                action_masks = self.train_model.action_mask_check(None, states.shape[0] * self.n_steps)
+
+        if len(action_masks) == 0:
+            action_masks = self.train_model.action_mask_check(None, self.n_steps * self.n_envs)
         td_map[self.train_model.action_mask_ph] = action_masks
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
@@ -248,8 +247,8 @@ class A2C(ActorCriticRLModel):
                 obs, states, rewards, masks, actions, values, action_masks, ep_infos, true_reward = runner.run()
                 ep_info_buf.extend(ep_infos)
                 _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks,
-                                                                 actions, values, self.num_timesteps // self.n_batch,
-                                                                 writer, action_masks)
+                                                                 actions, values, action_masks,
+                                                                 self.num_timesteps // self.n_batch, writer)
                 n_seconds = time.time() - t_start
                 fps = int((update * self.n_batch) / n_seconds)
 
@@ -330,7 +329,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_action_masks = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-        action_mask = None
+
         for _ in range(self.n_steps):
             actions, values, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_mask)
             mb_obs.append(np.copy(self.obs))
@@ -346,10 +345,15 @@ class A2CRunner(AbstractEnvRunner):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
+                # Did the env tell us what actions are valid?
                 if info.get('valid_actions') is not None:
                     self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
                     mb_action_masks.append(self.action_mask)
                     self.action_mask = np.expand_dims(self.action_mask, axis=0)
+                else:
+                    # otherwise, assume all actions are valid
+                    self.model.action_mask = None
+
             self.states = states
             self.dones = dones
             self.obs = obs

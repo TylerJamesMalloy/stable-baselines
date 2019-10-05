@@ -25,26 +25,27 @@ class DummyActionMaskEnv(gym.Env):
     def step(self, action):
         if action == 0:
             if self.action_state == 0:
-                raise Exception(f'Invalid action was selected! Valid actions: {self.valid_actions}, '
-                                f'action taken: {action}')
+                raise Exception("Invalid action was selected! Valid actions: {}, "
+                                "action taken: {}".format(self.valid_actions, action))
             self.action_state = 0
             self.valid_actions = [0, 1, 1]
 
         if action == 1:
             if self.action_state == 1:
-                raise Exception(f'Invalid action was selected! Valid actions: {self.valid_actions}, '
-                                f'action taken: {action}')
+                raise Exception("Invalid action was selected! Valid actions: {}, "
+                                "action taken: {}".format(self.valid_actions, action))
             self.action_state = 1
             self.valid_actions = [1, 0, 1]
 
         if action == 2:
             if self.action_state == 2:
-                raise Exception(f'Invalid action was selected! Valid actions: {self.valid_actions}, '
-                                f'action taken: {action}')
+                raise Exception("Invalid action was selected! Valid actions: {}, "
+                                "action taken: {}".format(self.valid_actions, action))
             self.action_state = 2
             self.valid_actions = [1, 1, 0]
 
         self.counter += 1
+        print("Env action mask: " + str(self.valid_actions))
         return self.state(), 1, self.finish(), {'valid_actions': self.valid_actions}
 
     def render(self, mode='human'):
