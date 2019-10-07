@@ -122,16 +122,7 @@ class BasePolicy(ABC):
             if add_action_ph:
                 self._action_ph = tf.placeholder(dtype=ac_space.dtype, shape=(n_batch,) + ac_space.shape,
                                                  name="action_ph")
-            if isinstance(ac_space, MultiDiscrete):
-                self._action_mask_ph = tf.placeholder(dtype=tf.float32, shape=(n_batch, len(ac_space.nvec), max(ac_space.nvec)),
-                                                      name="action_mask_ph")
-            elif isinstance(ac_space, Discrete) or isinstance(ac_space, MultiBinary):
-                self._action_mask_ph = tf.placeholder(dtype=tf.float32, shape=(n_batch, ac_space.n),
-                                                      name="action_mask_ph")
-            elif isinstance(ac_space, Box):
-                self._action_mask_ph = tf.placeholder(dtype=tf.float32, shape=(n_batch, ac_space.shape[0]),
-                                                      name="action_mask_ph")
-
+        self._action_mask_ph = None
         self.sess = sess
         self.reuse = reuse
         self.ob_space = ob_space
@@ -263,7 +254,7 @@ class ActorCriticPolicy(BasePolicy):
             assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
             if isinstance(self.proba_distribution, CategoricalProbabilityDistribution) or \
                     isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
-                self._proba_distribution.set_action_mask(self.action_mask_ph)
+                self._action_mask_ph = self._proba_distribution.action_mask_ph
             self._action = self.proba_distribution.sample()
             self._deterministic_action = self.proba_distribution.mode()
             self._neglogp = self.proba_distribution.neglogp(self.action)
@@ -533,21 +524,22 @@ class LstmPolicy(RecurrentActorCriticPolicy):
         self._setup_init()
 
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
-        action_mask = self.action_mask_check(action_mask, len(state))
+        feed_dict = {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask}
+        if action_mask is not None:
+            feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, len(state))
 
         if deterministic:
             return self.sess.run([self.deterministic_action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask,
-                                  self.action_mask_ph: action_mask})
+                                 feed_dict)
         else:
             return self.sess.run([self.action, self.value_flat, self.snew, self.neglogp],
-                                 {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask,
-                                  self.action_mask_ph: action_mask})
+                                 feed_dict)
 
     def proba_step(self, obs, state=None, mask=None, action_mask=None):
-        action_mask = self.action_mask_check(action_mask, len(state))
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask,
-                                                 self.action_mask_ph: action_mask})
+        feed_dict = {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask}
+        if action_mask is not None:
+            feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, len(state))
+        return self.sess.run(self.policy_proba, feed_dict)
 
     def value(self, obs, state=None, mask=None):
         return self.sess.run(self.value_flat, {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask})
@@ -607,18 +599,22 @@ class FeedForwardPolicy(ActorCriticPolicy):
         self._setup_init()
 
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
-        action_mask = self.action_mask_check(action_mask, self.n_steps)
+        feed_dict = {self.obs_ph: obs}
+        if action_mask is not None:
+            feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, self.n_steps)
         if deterministic:
             action, value, neglogp = self.sess.run([self.deterministic_action, self.value_flat, self.neglogp],
-                                                   {self.obs_ph: obs, self.action_mask_ph: action_mask})
+                                                   feed_dict)
         else:
             action, value, neglogp = self.sess.run([self.action, self.value_flat, self.neglogp],
-                                                   {self.obs_ph: obs, self.action_mask_ph: action_mask})
+                                                   feed_dict)
         return action, value, self.initial_state, neglogp
 
     def proba_step(self, obs, state=None, mask=None, action_mask=None):
-        action_mask = self.action_mask_check(action_mask, self.n_steps)
-        return self.sess.run(self.policy_proba, {self.obs_ph: obs, self.action_mask_ph: action_mask})
+        feed_dict = {self.obs_ph: obs}
+        if action_mask is not None:
+            feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, self.n_steps)
+        return self.sess.run(self.policy_proba, feed_dict)
 
     def value(self, obs, state=None, mask=None):
         return self.sess.run(self.value_flat, {self.obs_ph: obs})

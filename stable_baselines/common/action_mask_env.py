@@ -45,7 +45,6 @@ class DummyActionMaskEnv(gym.Env):
             self.valid_actions = [1, 1, 0]
 
         self.counter += 1
-        print("Env action mask: " + str(self.valid_actions))
         return self.state(), 1, self.finish(), {'valid_actions': self.valid_actions}
 
     def render(self, mode='human'):

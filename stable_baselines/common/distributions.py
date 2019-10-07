@@ -285,10 +285,13 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         :param logits: ([float]) the categorical logits input
         """
         self.logits = logits
-        self.action_mask = None
-        
-    def set_action_mask(self, action_mask):
-        self.action_mask = action_mask
+        with tf.variable_scope("input", reuse=False):
+            no_mask = tf.zeros_like(self.logits)
+            self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
+
+    @property
+    def action_mask_ph(self):
+        return self._action_mask_ph
 
     def flatparam(self):
         return self.logits
@@ -297,7 +300,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
         logits = self.logits
-        logits = tf.add(logits, self.action_mask[:, 0:logits.shape[1]])
+        logits = tf.add(logits, self.action_mask_ph[:, 0:logits.shape[1]])
         return tf.argmax(logits, axis=-1)
 
     def neglogp(self, x):
@@ -333,7 +336,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        probability = tf.add(probability, self.action_mask[:, 0:probability.shape[1]])
+        probability = tf.add(probability, self.action_mask_ph[:, 0:probability.shape[1]])
         return tf.argmax(probability, axis=-1)
 
     @classmethod
