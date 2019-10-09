@@ -24,7 +24,7 @@ def test_action_mask_discrete(model_class):
     model.learn(total_timesteps=1000, seed=0)
 
 
-MODEL_LIST = [A2C, PPO2]
+MODEL_LIST = [A2C, PPO1, PPO2, TRPO]
 
 
 @pytest.mark.slow

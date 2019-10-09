@@ -271,18 +271,19 @@ class PPO2(ActorCriticRLModel):
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
                   self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
 
-        if action_masks is not None:
-            if len(action_masks) == 0:
-                action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-        else:
-            action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
+        # if action_masks is not None:
+        #     if len(action_masks) == 0:
+        #         action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
+        # else:
+        #     action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
 
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
 
-        if self.train_model.action_mask_ph is not None:
+        if self.train_model.action_mask_ph is not None and len(action_masks) != 0:
             td_map[self.train_model.action_mask_ph] = action_masks
+
         if cliprange_vf is not None and cliprange_vf >= 0:
             td_map[self.clip_range_vf_ph] = cliprange_vf
 
@@ -492,13 +493,17 @@ class Runner(AbstractEnvRunner):
                 if info.get('episode') is not None:
                     ep_infos.append(info.get('episode'))
                 # Did the env tell us what actions are valid?
-                if info.get('valid_actions') is not None:
-                    self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                    mb_action_masks.append(self.action_mask)
-                    self.action_mask = np.expand_dims(self.action_mask, axis=0)
-                else:
-                    # otherwise, assume all actions are valid
-                    self.model.action_mask = None
+                if isinstance(self.env.action_space, gym.spaces.Discrete) or \
+                        isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                    if info.get('valid_actions') is not None:
+                        self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+                        mb_action_masks.append(self.action_mask)
+                        self.action_mask = np.expand_dims(self.action_mask, axis=0)
+                    else:
+                        self.action_mask = None
+                elif info.get('valid_actions') is not None:
+                    raise NotImplementedError("Action masking is not supported for {} "
+                                              "action spaces!".format(type(self.env.action_space)))
 
             mb_rewards.append(rewards)
         # batch of steps to batch of rollouts

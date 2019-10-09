@@ -599,7 +599,6 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
         feed_dict = {self.obs_ph: obs}
-        print(action_mask)
         if action_mask is not None:
             feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, self.n_steps)
         if deterministic:

@@ -5,8 +5,34 @@ Changelog
 
 For download links, please look at `Github release page <https://github.com/hill-a/stable-baselines/releases>`_.
 
-Pre-Release 2.7.1a0 (WIP)
--------------------------
+
+Pre-Release 2.8.1a0 (WIP)
+--------------------------
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+
+New Features:
+^^^^^^^^^^^^^
+
+Bug Fixes:
+^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+
+Documentation:
+^^^^^^^^^^^^^^
+- Add Snake Game AI project (@pedrohbtp)
+
+
+Release 2.8.0 (2019-09-29)
+--------------------------
+
+**MPI dependency optional, new save format, ACKTR with continuous actions**
 
 Breaking Changes:
 ^^^^^^^^^^^^^^^^^
@@ -22,12 +48,16 @@ Breaking Changes:
   by explicitly setting `start_method = 'fork'`. See
   `PR #428 <https://github.com/hill-a/stable-baselines/pull/428>`_.
 - Updated dependencies: tensorflow v1.8.0 is now required
-- Remove `checkpoint_path` and `checkpoint_freq` argument from `DQN` that were not used
+- Removed `checkpoint_path` and `checkpoint_freq` argument from `DQN` that were not used
+- Removed `bench/benchmark.py` that was not used
+- Removed several functions from `common/tf_util.py` that were not used
+- Removed `ppo1/run_humanoid.py`
 
 New Features:
 ^^^^^^^^^^^^^
 - **important change** Switch to using zip-archived JSON and Numpy `savez` for
   storing models for better support across library/Python versions. (@Miffyli)
+- ACKTR now supports continuous actions
 - Add `double_q` argument to `DQN` constructor
 
 Bug Fixes:
@@ -38,6 +68,7 @@ Bug Fixes:
   `Issue #430 <https://github.com/hill-a/stable-baselines/issues/430>`_.
 - Fix a bug when calling `logger.configure()` with MPI enabled (@keshaviyengar)
 - set `allow_pickle=True` for numpy>=1.17.0 when loading expert dataset
+- Fix a bug when using VecCheckNan with numpy ndarray as state.  `Issue #489 <https://github.com/hill-a/stable-baselines/issues/489>`_. (@ruifeng96150)
 
 Deprecations:
 ^^^^^^^^^^^^^
@@ -52,7 +83,10 @@ Others:
   to `stable_baselines.common.noise`. The API remains backward-compatible;
   for example `from stable_baselines.ddpg.noise import NormalActionNoise` is still
   okay. (@shwang)
-- docker images were updated
+- Docker images were updated
+- Cleaned up files in `common/` folder and in `acktr/` folder that were only used by old ACKTR version
+  (e.g. `filter.py`)
+- Renamed `acktr_disc.py` to `acktr.py`
 
 Documentation:
 ^^^^^^^^^^^^^^
@@ -474,4 +508,4 @@ In random order...
 Thanks to @bjmuld @iambenzo @iandanforth @r7vme @brendenpetersen @huvar @abhiskk @JohannesAck
 @EliasHasle @mrakgr @Bleyddyn @antoine-galataud @junhyeokahn @AdamGleave @keshaviyengar @tperol
 @XMaster96 @kantneel @Pastafarianist @GerardMaggiolino @PatrickWalter214 @yutingsz @sc420 @Aaahh @billtubbs
-@Miffyli @dwiel @miguelrass @qxcv @jaberkow @eavelardev
+@Miffyli @dwiel @miguelrass @qxcv @jaberkow @eavelardev @ruifeng96150

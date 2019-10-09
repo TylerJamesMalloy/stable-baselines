@@ -29,7 +29,7 @@ except ImportError:
 
 tf_dependency = []
 if install_tf:
-    tf_dependency = ['tensorflow-gpu>=1.8.0'] if tf_gpu else ['tensorflow>=1.8.0']
+    tf_dependency = ['tensorflow-gpu>=1.8.0,<2.0.0'] if tf_gpu else ['tensorflow>=1.8.0,<2.0.0']
     if tf_gpu:
         print("A GPU was detected, tensorflow-gpu will be installed")
 
@@ -140,7 +140,7 @@ setup(name='stable_baselines',
       license="MIT",
       long_description=long_description,
       long_description_content_type='text/markdown',
-      version="2.7.1a0",
+      version="2.8.0",
       )
 
 # python setup.py sdist

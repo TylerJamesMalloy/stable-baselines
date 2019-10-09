@@ -195,18 +195,13 @@ class A2C(ActorCriticRLModel):
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
 
-        if action_masks is not None:
-            if len(action_masks) == 0:
-                action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-        else:
-            action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
 
-        if self.train_model.action_mask_ph is not None:
+        if self.train_model.action_mask_ph is not None and len(action_masks) != 0:
             td_map[self.train_model.action_mask_ph] = action_masks
+
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
             if self.full_tensorboard_log and (1 + update) % 10 == 0:
@@ -349,13 +344,17 @@ class A2CRunner(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
                 # Did the env tell us what actions are valid?
-                if info.get('valid_actions') is not None:
-                    self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                    mb_action_masks.append(self.action_mask)
-                    self.action_mask = np.expand_dims(self.action_mask, axis=0)
-                else:
-                    # otherwise, assume all actions are valid
-                    self.model.action_mask = None
+                if isinstance(self.env.action_space, gym.spaces.Discrete) or \
+                        isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                    if info.get('valid_actions') is not None:
+                        self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+                        mb_action_masks.append(self.action_mask)
+                        self.action_mask = np.expand_dims(self.action_mask, axis=0)
+                    else:
+                        self.action_mask = None
+                elif info.get('valid_actions') is not None:
+                    raise NotImplementedError("Action masking is not supported for {} "
+                                              "action spaces!".format(type(self.env.action_space)))
 
             self.states = states
             self.dones = dones

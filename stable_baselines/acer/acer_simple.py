@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from gym.spaces import Discrete, Box
+from gym.spaces import Discrete, Box, MultiDiscrete
 
 from stable_baselines import logger
 from stable_baselines.a2c.utils import batch_to_seq, seq_to_batch, Scheduler, EpisodeStats, \
@@ -433,19 +433,16 @@ class ACER(ActorCriticRLModel):
         cur_lr = self.learning_rate_schedule.value_steps(steps)
         td_map = {self.train_model.obs_ph: obs, self.polyak_model.obs_ph: obs, self.action_ph: actions,
                   self.reward_ph: rewards, self.done_ph: dones, self.mu_ph: mus, self.learning_rate_ph: cur_lr}
-        if action_masks is not None:
-            if len(action_masks) == 0:
-                action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-        else:
-            action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
 
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
             td_map[self.polyak_model.states_ph] = states
             td_map[self.polyak_model.dones_ph] = masks
-        td_map[self.train_model.action_mask_ph] = action_masks
-        td_map[self.polyak_model.action_mask_ph] = action_masks
+
+        if self.train_model.action_mask_ph is not None and len(action_masks) != 0:
+            td_map[self.train_model.action_mask_ph] = action_masks
+            td_map[self.polyak_model.action_mask_ph] = action_masks
 
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
@@ -647,12 +644,18 @@ class _Runner(AbstractEnvRunner):
             obs, rewards, dones, infos = self.env.step(clipped_actions)
             for info in infos:
                 # Did the env tell us what actions are valid?
-                if info.get('valid_actions') is not None:
-                    self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                    mb_action_masks.append(self.action_mask)
-                    self.action_mask = np.expand_dims(self.action_mask, axis=0)
-                else:
-                    self.action_mask = None
+                if isinstance(self.env.action_space, Discrete) or \
+                        isinstance(self.env.action_space, MultiDiscrete):
+                    if info.get('valid_actions') is not None:
+                        self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+                        mb_action_masks.append(self.action_mask)
+                        self.action_mask = np.expand_dims(self.action_mask, axis=0)
+                    else:
+                        self.action_mask = None
+                elif info.get('valid_actions') is not None:
+                    raise NotImplementedError("Action masking is not supported for {} "
+                                              "action spaces!".format(type(self.env.action_space)))
+
             # states information for statefull models like LSTM
             self.states = states
             self.dones = dones
