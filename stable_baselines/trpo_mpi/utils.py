@@ -38,12 +38,11 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
 
     cur_ep_ret = 0  # return in current episode
     current_it_len = 0  # len of current iteration
-    current_ep_len = 0 # len of current episode
+    current_ep_len = 0  # len of current episode
     cur_ep_true_ret = 0
     ep_true_rets = []
     ep_rets = []  # returns of completed episodes in this segment
     ep_lens = []  # Episode lengths
-
     # Initialize history arrays
     observations = np.array([observation for _ in range(horizon)])
     true_rewards = np.zeros(horizon, 'float32')
@@ -52,12 +51,15 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
     episode_starts = np.zeros(horizon, 'bool')
     dones = np.zeros(horizon, 'bool')
     actions = np.array([action for _ in range(horizon)])
+    action_mask = None
+    action_masks = np.array([0 for _ in range(horizon*env.action_space.n)])
     states = policy.initial_state
     episode_start = True  # marks if we're on first timestep of an episode
     done = False
 
     while True:
-        action, vpred, states, _ = policy.step(observation.reshape(-1, *observation.shape), states, done)
+        action, vpred, states, _ = policy.step(observation.reshape(-1, *observation.shape), states, done,
+                                               action_mask=action_mask)
         # Slight weirdness here because we need value function at time T
         # before returning segment [0, T-1] so we get the correct
         # terminal value
@@ -101,6 +103,13 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
         else:
             observation, reward, done, info = env.step(clipped_action[0])
             true_reward = reward
+        if info.get('valid_actions') is not None:
+            action_mask = np.array(info.get('valid_actions'), dtype=np.float)
+            action_masks[i*env.action_space.n:i*env.action_space.n + env.action_space.n] = action_mask
+            action_mask = np.expand_dims(action_mask, axis=0)
+        else:
+            # otherwise, assume all actions are valid
+            action_mask = None
         rewards[i] = reward
         true_rewards[i] = true_reward
         dones[i] = done

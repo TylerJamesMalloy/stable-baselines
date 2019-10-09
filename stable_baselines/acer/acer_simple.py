@@ -433,8 +433,10 @@ class ACER(ActorCriticRLModel):
         cur_lr = self.learning_rate_schedule.value_steps(steps)
         td_map = {self.train_model.obs_ph: obs, self.polyak_model.obs_ph: obs, self.action_ph: actions,
                   self.reward_ph: rewards, self.done_ph: dones, self.mu_ph: mus, self.learning_rate_ph: cur_lr}
-
-        if len(action_masks) == 0:
+        if action_masks is not None:
+            if len(action_masks) == 0:
+                action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
+        else:
             action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
 
         if states is not None:

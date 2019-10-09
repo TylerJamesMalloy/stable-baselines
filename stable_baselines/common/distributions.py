@@ -285,13 +285,19 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         :param logits: ([float]) the categorical logits input
         """
         self.logits = logits
-        with tf.variable_scope("input", reuse=False):
-            no_mask = tf.zeros_like(self.logits)
-            self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
+        self._action_mask_ph = None
 
     @property
     def action_mask_ph(self):
         return self._action_mask_ph
+
+    def create_action_mask(self):
+        with tf.variable_scope("input", reuse=False):
+            no_mask = tf.zeros_like(self.logits)
+            self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
+
+    def slice_action_mask(self, action_mask, start):
+        self._action_mask_ph = action_mask[:, start:start+self.logits.shape[-1]]
 
     def flatparam(self):
         return self.logits
@@ -336,7 +342,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        probability = tf.add(probability, self.action_mask_ph[:, 0:probability.shape[1]])
+        probability = tf.add(probability, self.action_mask_ph)
         return tf.argmax(probability, axis=-1)
 
     @classmethod
@@ -359,11 +365,20 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
         :param flat: ([float]) the categorical logits input
         """
         self.flat = flat
+        with tf.variable_scope("input", reuse=False):
+            no_mask = tf.zeros_like(self.flat)
+            self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.flat.shape, name="action_ph")
         self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1)))
 
-    def set_action_mask(self, action_mask):
-        for i, categorical in enumerate(self.categoricals):
-            categorical.set_action_mask(action_mask[:, i])
+    def create_action_mask(self):
+        prev = 0
+        for categorical in self.categoricals:
+            categorical.slice_action_mask(self.action_mask_ph, prev)
+            prev = prev + categorical.logits.shape[-1]
+
+    @property
+    def action_mask_ph(self):
+        return self._action_mask_ph
 
     def flatparam(self):
         return self.flat

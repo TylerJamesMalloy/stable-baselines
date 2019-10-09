@@ -210,11 +210,9 @@ class BasePolicy(ABC):
     def action_mask_check(self, action_mask, num_samples):
         if action_mask is None:
             if isinstance(self.ac_space, MultiDiscrete):
-                action_mask = np.zeros((num_samples, len(self.ac_space.nvec), max(self.ac_space.nvec)), dtype=np.float32)
-            elif isinstance(self.ac_space, Discrete) or isinstance(self.ac_space, MultiBinary):
+                action_mask = np.zeros((num_samples, len(self.ac_space.nvec)* max(self.ac_space.nvec)), dtype=np.float32)
+            elif isinstance(self.ac_space, Discrete):
                 action_mask = np.zeros((num_samples, self.ac_space.n), dtype=np.float32)
-            else:
-                action_mask = np.zeros((num_samples, self.ac_space.shape[0]), dtype=np.float32)
         else:
             action_mask = np.array(action_mask, dtype=np.float32)
             action_mask[action_mask <= 0] = -np.inf
@@ -254,7 +252,8 @@ class ActorCriticPolicy(BasePolicy):
             assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
             if isinstance(self.proba_distribution, CategoricalProbabilityDistribution) or \
                     isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
-                self._action_mask_ph = self._proba_distribution.action_mask_ph
+                self.proba_distribution.create_action_mask()
+                self._action_mask_ph = self.proba_distribution.action_mask_ph
             self._action = self.proba_distribution.sample()
             self._deterministic_action = self.proba_distribution.mode()
             self._neglogp = self.proba_distribution.neglogp(self.action)
@@ -600,6 +599,7 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
         feed_dict = {self.obs_ph: obs}
+        print(action_mask)
         if action_mask is not None:
             feed_dict[self.action_mask_ph] = self.action_mask_check(action_mask, self.n_steps)
         if deterministic:

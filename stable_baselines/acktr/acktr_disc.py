@@ -228,13 +228,16 @@ class ACKTR(ActorCriticRLModel):
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions, self.advs_ph: advs, self.rewards_ph: rewards,
                   self.pg_lr_ph: cur_lr}
 
+        if action_masks is not None:
+            if len(action_masks) == 0:
+                action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
+        else:
+            action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
+
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
-            if len(action_masks) == 0:
-                action_masks = self.train_model.action_mask_check(None, states.shape[0] * self.n_steps)
-        if len(action_masks) == 0:
-            action_masks = self.train_model.action_mask_check(None, self.n_steps * self.n_envs)
+
         td_map[self.train_model.action_mask_ph] = action_masks
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
