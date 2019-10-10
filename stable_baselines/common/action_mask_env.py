@@ -10,7 +10,7 @@ class DiscreteEnv(gym.Env):
     def __init__(self):
         self.action_space = gym.spaces.Discrete(2)
 
-        self.observation_shape = (1, 100)
+        self.observation_shape = (1, 10, 10)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float16)
 
     def reset(self):
@@ -44,9 +44,9 @@ class DiscreteEnv(gym.Env):
         return self.counter == 500
 
     def state(self):
-        temp = np.array([*range(100)])
+        temp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = temp/100
-        return [obs]
+        return obs
 
 class MultiDiscreteEnv1(gym.Env):
     """
@@ -57,7 +57,7 @@ class MultiDiscreteEnv1(gym.Env):
     def __init__(self):
         self.action_space = gym.spaces.MultiDiscrete([2])
 
-        self.observation_shape = (1, 100)
+        self.observation_shape = (1, 10, 10)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float16)
 
     def reset(self):
@@ -91,9 +91,9 @@ class MultiDiscreteEnv1(gym.Env):
         return self.counter == 500
 
     def state(self):
-        temp = np.array([*range(100)])
+        temp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = temp/100
-        return [obs]
+        return obs
 
 class MultiDiscreteEnv2(gym.Env):
     """
@@ -104,7 +104,7 @@ class MultiDiscreteEnv2(gym.Env):
     def __init__(self):
         self.action_space = gym.spaces.MultiDiscrete([2,4])
 
-        self.observation_shape = (1, 100)
+        self.observation_shape = (1, 10, 10)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float16)
 
     def reset(self):
@@ -138,6 +138,6 @@ class MultiDiscreteEnv2(gym.Env):
         return self.counter == 500
 
     def state(self):
-        temp = np.array([*range(100)])
+        temp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = temp/100
-        return [obs]
+        return obs
