@@ -323,7 +323,7 @@ class BaseRLModel(ABC):
         pass
 
     @abstractmethod
-    def predict(self, observation, state=None, mask=None, deterministic=False):
+    def predict(self, observation, state=None, mask=None, deterministic=False, action_mask=None):
         """
         Get the model's action from an observation
 
@@ -331,6 +331,7 @@ class BaseRLModel(ABC):
         :param state: (np.ndarray) The last states (can be None, used in recurrent policies)
         :param mask: (np.ndarray) The last masks (can be None, used in recurrent policies)
         :param deterministic: (bool) Whether or not to return deterministic actions.
+        :param action_mask: (np.ndarray) The last masks (can be None, used in block invalid action)
         :return: (np.ndarray, np.ndarray) the model's action and the next state (used in recurrent policies)
         """
         pass
@@ -710,16 +711,29 @@ class ActorCriticRLModel(BaseRLModel):
               log_interval=100, tb_log_name="run", reset_num_timesteps=True):
         pass
 
-    def predict(self, observation, state=None, mask=None, deterministic=False):
+    def predict(self, observation, state=None, mask=None, deterministic=False, action_mask=None):
         if state is None:
             state = self.initial_state
         if mask is None:
             mask = [False for _ in range(self.n_envs)]
+
+        action_masks = []
+        if action_mask is not None:
+            for env_action_mask in action_mask:
+                if isinstance(self.env.action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
+                    action_masks.append(np.concatenate(env_action_mask))
+                elif isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                    action_masks.append(np.ones(sum(self.env.action_space.nvec)))
+                elif isinstance(self.env.action_space, gym.spaces.Discrete) and env_action_mask is not None:
+                    action_masks.append(env_action_mask)
+                elif isinstance(self.env.action_space, gym.spaces.Discrete):
+                    action_masks.append(np.ones(self.env.action_space.n))
+
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions, _, states, _ = self.step(observation, state, mask, deterministic=deterministic)
+        actions, _, states, _ = self.step(observation, state, mask, deterministic=deterministic, action_mask=action_masks)
 
         clipped_actions = actions
         # Clip the actions to avoid out of bound error
@@ -884,7 +898,7 @@ class OffPolicyRLModel(BaseRLModel):
         pass
 
     @abstractmethod
-    def predict(self, observation, state=None, mask=None, deterministic=False):
+    def predict(self, observation, state=None, mask=None, deterministic=False, action_mask=None):
         pass
 
     @abstractmethod

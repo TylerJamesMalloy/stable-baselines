@@ -309,6 +309,7 @@ class A2CRunner(AbstractEnvRunner):
         """
         super(A2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
+        self.action_masks = []
 
     def run(self):
         """
@@ -321,7 +322,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_states = self.states
         ep_infos = []
         for _ in range(self.n_steps):
-            actions, values, states, _ = self.model.step(self.obs, self.states, self.dones)
+            actions, values, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_masks)
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_values.append(values)
@@ -331,10 +332,22 @@ class A2CRunner(AbstractEnvRunner):
             if isinstance(self.env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
             obs, rewards, dones, infos = self.env.step(clipped_actions)
+            self.action_masks.clear()
             for info in infos:
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
+
+                # actoin mask
+                env_action_mask = info.get('action_mask')
+                if isinstance(self.env.action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
+                    self.action_masks.append(np.concatenate(env_action_mask))
+                elif isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                    self.action_masks.append(np.ones(sum(self.env.action_space.nvec)))
+                elif isinstance(self.env.action_space, gym.spaces.Discrete) and env_action_mask is not None:
+                    self.action_masks.append(env_action_mask)
+                elif isinstance(self.env.action_space, gym.spaces.Discrete):
+                    self.action_masks.append(np.ones(self.env.action_space.n))
 
             self.states = states
             self.dones = dones
