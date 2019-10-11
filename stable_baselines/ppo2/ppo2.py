@@ -10,6 +10,7 @@ import tensorflow as tf
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
+from stable_baselines.common.misc_util import flatten_action_mask
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
 
@@ -482,14 +483,7 @@ class Runner(AbstractEnvRunner):
 
                 # actoin mask
                 env_action_mask = info.get('action_mask')
-                if isinstance(self.env.action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
-                    self.action_masks.append(np.concatenate(env_action_mask))
-                elif isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
-                    self.action_masks.append(np.ones(sum(self.env.action_space.nvec)))
-                elif isinstance(self.env.action_space, gym.spaces.Discrete) and env_action_mask is not None:
-                    self.action_masks.append(env_action_mask)
-                elif isinstance(self.env.action_space, gym.spaces.Discrete):
-                    self.action_masks.append(np.ones(self.env.action_space.n))
+                self.action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
 
             mb_rewards.append(rewards)
         # batch of steps to batch of rollouts

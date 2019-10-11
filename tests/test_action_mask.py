@@ -1,6 +1,4 @@
 import pytest
-import gym
-import numpy as np
 import os
 import warnings
 
@@ -16,7 +14,7 @@ warnings.filterwarnings("ignore")
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_learn_PPO1(vec_env, policy, env_class):
+def test_action_mask_learn_ppo1(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = PPO1(policy, env, verbose=0)
@@ -27,7 +25,7 @@ def test_action_mask_learn_PPO1(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_run_PPO1(vec_env, policy, env_class):
+def test_action_mask_run_ppo1(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = PPO1(policy, env, verbose=0)
@@ -35,7 +33,7 @@ def test_action_mask_run_PPO1(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:
@@ -48,7 +46,7 @@ def test_action_mask_run_PPO1(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_learn_PPO2(vec_env, policy, env_class):
+def test_action_mask_learn_ppo2(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = PPO2(policy, env, verbose=0, nminibatches=2)
@@ -59,7 +57,7 @@ def test_action_mask_learn_PPO2(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_run_PPO2(vec_env, policy, env_class):
+def test_action_mask_run_ppo2(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = PPO2(policy, env, verbose=0, nminibatches=1)
@@ -67,7 +65,7 @@ def test_action_mask_run_PPO2(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:
@@ -80,7 +78,7 @@ def test_action_mask_run_PPO2(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_learn_A2C(vec_env, policy, env_class):
+def test_action_mask_learn_a2c(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = A2C(policy, env, verbose=0)
@@ -91,7 +89,7 @@ def test_action_mask_learn_A2C(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_run_A2C(vec_env, policy, env_class):
+def test_action_mask_run_a2c(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = A2C(policy, env, verbose=0)
@@ -99,7 +97,7 @@ def test_action_mask_run_A2C(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:
@@ -112,7 +110,7 @@ def test_action_mask_run_A2C(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv])
-def test_action_mask_learn_ACER(vec_env, policy, env_class):
+def test_action_mask_learn_acer(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = ACER(policy, env, verbose=0)
@@ -123,7 +121,7 @@ def test_action_mask_learn_ACER(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv])
-def test_action_mask_run_ACER(vec_env, policy, env_class):
+def test_action_mask_run_acer(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = ACER(policy, env, verbose=0)
@@ -131,7 +129,7 @@ def test_action_mask_run_ACER(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:
@@ -144,7 +142,7 @@ def test_action_mask_run_ACER(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv])
-def test_action_mask_learn_ACKTR(vec_env, policy, env_class):
+def test_action_mask_learn_acktr(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = ACKTR(policy, env, verbose=0)
@@ -155,7 +153,7 @@ def test_action_mask_learn_ACKTR(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv])
-def test_action_mask_run_ACKTR(vec_env, policy, env_class):
+def test_action_mask_run_acktr(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = ACKTR(policy, env, verbose=0)
@@ -163,7 +161,7 @@ def test_action_mask_run_ACKTR(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:
@@ -176,7 +174,7 @@ def test_action_mask_run_ACKTR(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_learn_TRPO(vec_env, policy, env_class):
+def test_action_mask_learn_trpo(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = TRPO(policy, env, verbose=0)
@@ -187,7 +185,7 @@ def test_action_mask_learn_TRPO(vec_env, policy, env_class):
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
 @pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
-def test_action_mask_run_TRPO(vec_env, policy, env_class):
+def test_action_mask_run_trpo(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = TRPO(policy, env, verbose=0)
@@ -195,7 +193,7 @@ def test_action_mask_run_TRPO(vec_env, policy, env_class):
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:
         action, _states = model.predict(obs, action_mask=action_masks)
-        obs, reward, done, infos = env.step(action)
+        obs, _, done, infos = env.step(action)
 
         action_masks.clear()
         for info in infos:

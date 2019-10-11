@@ -2,6 +2,7 @@ import gym
 import numpy as np
 
 from stable_baselines.common.vec_env import VecEnv
+from stable_baselines.common.misc_util import flatten_action_mask
 
 
 def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
@@ -110,14 +111,7 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
         # actoin mask
         action_masks.clear()
         env_action_mask = info.get('action_mask')
-        if isinstance(env.action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
-            action_masks.append(np.concatenate(env_action_mask))
-        elif isinstance(env.action_space, gym.spaces.MultiDiscrete):
-            action_masks.append(np.ones(sum(env.action_space.nvec)))
-        elif isinstance(env.action_space, gym.spaces.Discrete) and env_action_mask is not None:
-            action_masks.append(env_action_mask)
-        elif isinstance(env.action_space, gym.spaces.Discrete):
-            action_masks.append(np.ones(env.action_space.n))
+        action_masks.append(flatten_action_mask(env.action_space, env_action_mask))
 
         cur_ep_ret += reward
         cur_ep_true_ret += true_reward

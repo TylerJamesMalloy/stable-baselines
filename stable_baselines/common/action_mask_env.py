@@ -102,7 +102,7 @@ class MultiDiscreteEnv2(gym.Env):
     action_space = gym.spaces.MultiDiscreteEnv1([2, 4])
     """
     def __init__(self):
-        self.action_space = gym.spaces.MultiDiscrete([2,4])
+        self.action_space = gym.spaces.MultiDiscrete([2, 4])
 
         self.observation_shape = (1, 10, 10)
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float16)
@@ -141,3 +141,4 @@ class MultiDiscreteEnv2(gym.Env):
         temp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = temp/100
         return obs
+        

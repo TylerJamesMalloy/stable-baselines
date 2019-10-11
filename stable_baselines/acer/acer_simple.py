@@ -11,6 +11,7 @@ from stable_baselines.acer.buffer import Buffer
 from stable_baselines.common import ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
+from stable_baselines.common.misc_util import flatten_action_mask
 
 
 def strip(var, n_envs, n_steps, flat=False):
@@ -640,10 +641,7 @@ class _Runner(AbstractEnvRunner):
             for info in infos:
                 # actoin mask
                 env_action_mask = info.get('action_mask')
-                if isinstance(self.env.action_space, Discrete) and env_action_mask is not None:
-                    self.action_masks.append(env_action_mask)
-                elif isinstance(self.env.action_space, Discrete):
-                    self.action_masks.append(np.ones(self.env.action_space.n))
+                self.action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
 
             # states information for statefull models like LSTM
             self.states = states
