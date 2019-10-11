@@ -733,7 +733,7 @@ class ActorCriticRLModel(BaseRLModel):
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions, _, states, _ = self.step(observation, state, mask, deterministic=deterministic, action_mask=action_masks)
+        actions, _, states, _ = self.step(observation, state, mask, action_mask=action_masks, deterministic=deterministic)
 
         clipped_actions = actions
         # Clip the actions to avoid out of bound error

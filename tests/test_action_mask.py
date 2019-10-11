@@ -6,11 +6,43 @@ import warnings
 
 from stable_baselines.common.policies import MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy
 from stable_baselines.common.vec_env import  SubprocVecEnv, DummyVecEnv
-from stable_baselines import PPO2, A2C, ACER, ACKTR
+from stable_baselines import PPO1, PPO2, A2C, ACER, ACKTR, TRPO
 from stable_baselines.common.action_mask_env import DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 warnings.filterwarnings("ignore")
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
+@pytest.mark.parametrize('policy', [MlpPolicy])
+@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+def test_action_mask_learn_PPO1(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = PPO1(policy, env, verbose=0)
+    model.learn(total_timesteps = 500)
+    env.close()
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
+@pytest.mark.parametrize('policy', [MlpPolicy])
+@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+def test_action_mask_run_PPO1(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = PPO1(policy, env, verbose=0)
+
+    obs, done, action_masks = env.reset(), [False], []
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        action_masks.clear()
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks.append(env_action_mask)
+
+    env.close()
 
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
@@ -127,6 +159,38 @@ def test_action_mask_run_ACKTR(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = ACKTR(policy, env, verbose=0)
+
+    obs, done, action_masks = env.reset(), [False], []
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        action_masks.clear()
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks.append(env_action_mask)
+
+    env.close()
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
+@pytest.mark.parametrize('policy', [MlpPolicy])
+@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+def test_action_mask_learn_TRPO(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = TRPO(policy, env, verbose=0)
+    model.learn(total_timesteps = 500)
+    env.close()
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
+@pytest.mark.parametrize('policy', [MlpPolicy])
+@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+def test_action_mask_run_TRPO(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = TRPO(policy, env, verbose=0)
 
     obs, done, action_masks = env.reset(), [False], []
     while not done[0]:

@@ -326,7 +326,7 @@ class ActorCriticPolicy(BasePolicy):
         return self._policy_proba
 
     @abstractmethod
-    def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
+    def step(self, obs, state=None, mask=None, action_mask=None, deterministic=False):
         """
         Returns the policy for a single step
 
@@ -532,7 +532,7 @@ class LstmPolicy(RecurrentActorCriticPolicy):
                     self.pdtype.proba_distribution_from_latent(latent_policy, latent_value, action_mask_ph=self.action_mask_ph)
         self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
+    def step(self, obs, state=None, mask=None, action_mask=None, deterministic=False):
         action_mask = self.action_mask_check(action_mask)
 
         if deterministic:
@@ -602,7 +602,7 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
         self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
+    def step(self, obs, state=None, mask=None, action_mask=None, deterministic=False):
         action_mask = self.action_mask_check(action_mask)
         
         if deterministic:
