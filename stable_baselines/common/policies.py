@@ -242,9 +242,7 @@ class ActorCriticPolicy(BasePolicy):
         self._deterministic_action = None
 
     def _setup_init(self):
-        """
-        sets up the distibutions, actions, and value
-        """
+        """Sets up the distributions, actions, and value."""
         with tf.variable_scope("output", reuse=True):
             assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
             if isinstance(self.proba_distribution, CategoricalProbabilityDistribution) or \

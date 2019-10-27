@@ -6,28 +6,39 @@ Changelog
 For download links, please look at `Github release page <https://github.com/hill-a/stable-baselines/releases>`_.
 
 
-Pre-Release 2.8.1a0 (WIP)
+Pre-Release 2.9.0a0 (WIP)
 --------------------------
 
 Breaking Changes:
 ^^^^^^^^^^^^^^^^^
+- The `seed` argument has been moved from `learn()` method to model constructor
+  in order to have reproducible results
 
 New Features:
 ^^^^^^^^^^^^^
+- Add `n_cpu_tf_sess` to model constructor to choose the number of threads used by Tensorflow
 
 Bug Fixes:
 ^^^^^^^^^^
+- Fix seeding, so it is now possible to have deterministic results on cpu
+- Fix a bug in DDPG where `predict` method with `deterministic=False` would fail
 
 Deprecations:
 ^^^^^^^^^^^^^
+- `nprocs` (ACKTR) and `num_procs` (ACER) are deprecated in favor of `n_cpu_tf_sess` which is now common
+  to all algorithms
 
 Others:
 ^^^^^^^
+- Add upper bound for Tensorflow version (<2.0.0).
 
 Documentation:
 ^^^^^^^^^^^^^^
 - Add Snake Game AI project (@pedrohbtp)
-
+- Add note on the support Tensorflow versions.
+- Remove unnecessary steps required for Windows installation.
+- Add QuaRL project (@srivatsankrishnan)
+- Add Pwnagotchi project (@evilsocket)
 
 Release 2.8.0 (2019-09-29)
 --------------------------
@@ -212,7 +223,6 @@ Documentation:
 - added guide for managing ``NaN`` and ``inf``
 - updated ven_env doc
 - misc doc updates
-
 
 Release 2.5.1 (2019-05-04)
 --------------------------
@@ -508,4 +518,4 @@ In random order...
 Thanks to @bjmuld @iambenzo @iandanforth @r7vme @brendenpetersen @huvar @abhiskk @JohannesAck
 @EliasHasle @mrakgr @Bleyddyn @antoine-galataud @junhyeokahn @AdamGleave @keshaviyengar @tperol
 @XMaster96 @kantneel @Pastafarianist @GerardMaggiolino @PatrickWalter214 @yutingsz @sc420 @Aaahh @billtubbs
-@Miffyli @dwiel @miguelrass @qxcv @jaberkow @eavelardev @ruifeng96150
+@Miffyli @dwiel @miguelrass @qxcv @jaberkow @eavelardev @ruifeng96150 @pedrohbtp @srivatsankrishnan @evilsocket 

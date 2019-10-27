@@ -8,8 +8,10 @@ from stable_baselines.a2c.utils import linear
 
 class ProbabilityDistribution(object):
     """
-    A particular probability distribution
+    Base class for describing a probability distribution.
     """
+    def __init__(self):
+        super(ProbabilityDistribution, self).__init__()
 
     def flatparam(self):
         """
@@ -41,7 +43,7 @@ class ProbabilityDistribution(object):
         """
         Calculates the Kullback-Leibler divergence from the given probabilty distribution
 
-        :param other: ([float]) the distibution to compare with
+        :param other: ([float]) the distribution to compare with
         :return: (float) the KL divergence of the two distributions
         """
         raise NotImplementedError
@@ -300,6 +302,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
     def slice_action_mask(self, action_mask, start):
         self._action_mask_ph = action_mask[:, start:start+self.logits.shape[-1]]
 
+
     def flatparam(self):
         return self.logits
 
@@ -370,6 +373,7 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
             no_mask = tf.zeros_like(self.flat)
             self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.flat.shape, name="action_ph")
         self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1)))
+        super(MultiCategoricalProbabilityDistribution, self).__init__()
 
     def create_action_mask(self):
         prev = 0
@@ -422,6 +426,7 @@ class DiagGaussianProbabilityDistribution(ProbabilityDistribution):
         self.mean = mean
         self.logstd = logstd
         self.std = tf.exp(logstd)
+        super(DiagGaussianProbabilityDistribution, self).__init__()
 
     def flatparam(self):
         return self.flat
@@ -446,7 +451,8 @@ class DiagGaussianProbabilityDistribution(ProbabilityDistribution):
     def sample(self):
         # Bounds are taken into acount outside this class (during training only)
         # Otherwise, it changes the distribution and breaks PPO2 for instance
-        return self.mean + self.std * tf.random_normal(tf.shape(self.mean), dtype=self.mean.dtype)
+        return self.mean + self.std * tf.random_normal(tf.shape(self.mean),
+                                                       dtype=self.mean.dtype)
 
     @classmethod
     def fromflat(cls, flat):
@@ -468,6 +474,7 @@ class BernoulliProbabilityDistribution(ProbabilityDistribution):
         """
         self.logits = logits
         self.probabilities = tf.sigmoid(logits)
+        super(BernoulliProbabilityDistribution, self).__init__()
 
     def flatparam(self):
         return self.logits
