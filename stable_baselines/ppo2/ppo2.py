@@ -6,7 +6,6 @@ from collections import deque
 import gym
 import numpy as np
 import tensorflow as tf
-from gym import spaces
 
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter

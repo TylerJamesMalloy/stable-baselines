@@ -68,11 +68,11 @@ class MultiDiscreteUnbalancedActionMaskEnv(gym.Env):
         valid_actions = [[1, 1],
                          [1, 1, 1],
                          [1, 1, 1, 1]]
-        for i in range(0, len(action)):
-            if self.valid_actions[i][action[i]] == 0:
+        for i, ac in enumerate(action):
+            if self.valid_actions[i][ac] == 0:
                 raise Exception("Invalid action was selected! Valid actions: {}, "
                                 "action taken: {}".format(self.valid_actions, action))
-            valid_actions[i][action[i]] = 0
+            valid_actions[i][ac] = 0
 
         self.valid_actions = valid_actions
         self.counter += 1

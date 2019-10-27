@@ -286,6 +286,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         """
         self.logits = logits
         self._action_mask_ph = None
+        super(CategoricalProbabilityDistribution, self).__init__()
 
     @property
     def action_mask_ph(self):

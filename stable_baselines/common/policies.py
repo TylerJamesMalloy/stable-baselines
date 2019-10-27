@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import tensorflow as tf
-from gym.spaces import Discrete, MultiDiscrete, MultiBinary, Box
+from gym.spaces import Discrete
 
 from stable_baselines.a2c.utils import conv, linear, conv_to_fc, batch_to_seq, seq_to_batch, lstm
 from stable_baselines.common.distributions import make_proba_dist_type, CategoricalProbabilityDistribution, \
@@ -191,18 +191,20 @@ class BasePolicy(ABC):
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
+        :param action_mask: ([bool]) The action mask
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
         raise NotImplementedError
 
     @abstractmethod
-    def proba_step(self, obs, state=None, mask=None):
+    def proba_step(self, obs, state=None, mask=None, action_mask=None):
         """
         Returns the action probability for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
+        :param action_mask: ([bool]) The action masks
         :return: ([float]) the action probability
         """
         raise NotImplementedError
