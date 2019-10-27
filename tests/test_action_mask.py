@@ -1,45 +1,142 @@
 import pytest
+import numpy as np
 
-from stable_baselines import A2C, ACER, ACKTR, PPO1, PPO2, TRPO
-from stable_baselines.common.action_mask_env import DummyActionMaskEnvDiscrete, DummyActionMaskEnvMutliDiscrete
-from stable_baselines.common.vec_env import DummyVecEnv
+from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
+from stable_baselines import PPO2, A2C, ACER, ACKTR
+from stable_baselines.common.action_mask_env import DiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv
 
-MODEL_LIST = [A2C, ACER, ACKTR, PPO1, PPO2, TRPO]
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("model_class", MODEL_LIST)
-def test_action_mask_discrete(model_class):
-    """
-    Test if the algorithm (with a given policy)
-    can learn an identity transformation (i.e. return observation as an action)
-    with a multidiscrete action space
-
-    :param model_class: (BaseRLModel) A RL Model
-    """
-    env = DummyVecEnv([lambda: DummyActionMaskEnvDiscrete()])
-
-    model = model_class("MlpPolicy", env)
-
-    model.learn(total_timesteps=1000, seed=0)
-
-
-MODEL_LIST = [A2C, PPO1, PPO2, TRPO]
+VEC_ENVS = [DummyVecEnv, SubprocVecEnv]
+POLICIES = ["MlpPolicy", "MlpLstmPolicy"]
+ENVS = [DiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv]
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("model_class", MODEL_LIST)
-def test_action_mask_multi_discrete(model_class):
-    """
-    Test if the algorithm (with a given policy)
-    can learn an identity transformation (i.e. return observation as an action)
-    with a multidiscrete action space
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', ENVS)
+def test_action_mask_learn_ppo2(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()]*4)
 
-    :param model_class: (BaseRLModel) A RL Model
-    """
-    env = DummyVecEnv([lambda: DummyActionMaskEnvMutliDiscrete()])
+    model = PPO2(policy, env, verbose=0, nminibatches=2)
+    model.learn(total_timesteps=1000)
+    env.close()
 
-    model = model_class("MlpPolicy", env)
 
-    model.learn(total_timesteps=1000, seed=0)
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', ENVS)
+def test_action_mask_run_ppo2(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
 
+    model = PPO2(policy, env, verbose=0, nminibatches=1)
+
+    obs, done, action_masks = env.reset(), [False], None
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks = np.expand_dims(np.asarray(env_action_mask), axis=0)
+
+    env.close()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', ENVS)
+def test_action_mask_learn_a2c(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()] * 4)
+
+    model = A2C(policy, env, verbose=0)
+    model.learn(total_timesteps=1000)
+    env.close()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', ENVS)
+def test_action_mask_run_a2c(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = A2C(policy, env, verbose=0)
+
+    obs, done, action_masks = env.reset(), [False], None
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks = np.expand_dims(np.asarray(env_action_mask), axis=0)
+
+    env.close()
+
+
+# @pytest.mark.slow
+# @pytest.mark.parametrize('vec_env', VEC_ENVS)
+# @pytest.mark.parametrize('policy', POLICIES)
+# @pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+# def test_action_mask_learn_acer(vec_env, policy, env_class):
+#     env = vec_env([lambda: env_class()] * 4)
+#
+#     model = ACER(policy, env, verbose=0)
+#     model.learn(total_timesteps=1000)
+#     env.close()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+def test_action_mask_run_acer(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = ACER(policy, env, verbose=0)
+
+    obs, done, action_masks = env.reset(), [False], None
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks = np.expand_dims(np.asarray(env_action_mask), axis=0)
+
+    env.close()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+def test_action_mask_learn_acktr(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()] * 4)
+
+    model = ACKTR(policy, env, verbose=0)
+    model.learn(total_timesteps=1000)
+    env.close()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('vec_env', VEC_ENVS)
+@pytest.mark.parametrize('policy', POLICIES)
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+def test_action_mask_run_acktr(vec_env, policy, env_class):
+    env = vec_env([lambda: env_class()])
+
+    model = ACKTR(policy, env, verbose=0)
+
+    obs, done, action_masks = env.reset(), [False], None
+    while not done[0]:
+        action, _states = model.predict(obs, action_mask=action_masks)
+        obs, reward, done, infos = env.step(action)
+
+        for info in infos:
+            env_action_mask = info.get('action_mask')
+            action_masks = np.expand_dims(np.asarray(env_action_mask), axis=0)
+
+    env.close()

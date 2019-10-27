@@ -51,7 +51,7 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
     episode_starts = np.zeros(horizon, 'bool')
     dones = np.zeros(horizon, 'bool')
     actions = np.array([action for _ in range(horizon)])
-    action_mask = None
+    action_masks = None
     if isinstance(env.action_space, Discrete):
         action_masks = np.array([0 for _ in range(horizon*env.action_space.n)])
     elif isinstance(env.action_space, MultiDiscrete):
@@ -64,7 +64,7 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
 
     while True:
         action, vpred, states, _ = policy.step(observation.reshape(-1, *observation.shape), states, done,
-                                               action_mask=action_mask)
+                                               action_mask=None)
         # Slight weirdness here because we need value function at time T
         # before returning segment [0, T-1] so we get the correct
         # terminal value
@@ -110,23 +110,6 @@ def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):
             observation, reward, done, info = env.step(clipped_action[0])
             true_reward = reward
 
-        # Did the env tell us what actions are valid?
-        if isinstance(env.action_space, gym.spaces.Discrete) or \
-                isinstance(env.action_space, gym.spaces.MultiDiscrete):
-            if info.get('valid_actions') is not None:
-                action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                if isinstance(env.action_space, gym.spaces.Discrete):
-                    action_masks[i * env.action_space.n: i * env.action_space.n + env.action_space.n] = action_mask
-                else:
-                    action_masks[i * sum(env.action_space.nvec):
-                                 i * sum(env.action_space.nvec) + sum(env.action_space.nvec)] = action_mask
-                action_mask = np.expand_dims(action_mask, axis=0)
-            else:
-                # otherwise, assume all actions are valid
-                action_mask = None
-        elif info.get('valid_actions') is not None:
-            raise NotImplementedError("Action masking is not supported for {} "
-                                      "action spaces!".format(type(env.action_space)))
         rewards[i] = reward
         true_rewards[i] = true_reward
         dones[i] = done

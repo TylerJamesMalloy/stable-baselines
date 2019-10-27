@@ -3,7 +3,7 @@ import numpy as np
 from gym.spaces import Discrete, MultiDiscrete
 
 
-class DummyActionMaskEnvDiscrete(gym.Env):
+class DiscreteActionMaskEnv(gym.Env):
     metadata = {'render.modes': ['human', 'system', 'none']}
 
     def __init__(self):
@@ -29,7 +29,7 @@ class DummyActionMaskEnvDiscrete(gym.Env):
 
         self.counter += 1
         self.valid_actions = valid_actions
-        return self.state(), 1, self.finish(), {'valid_actions': self.valid_actions}
+        return self.state(), 1, self.finish(), {'action_mask': self.valid_actions}
 
     def render(self, mode='human'):
         pass
@@ -40,10 +40,10 @@ class DummyActionMaskEnvDiscrete(gym.Env):
     def state(self):
         tmp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = tmp / 100
-        return [obs]
+        return obs
 
 
-class DummyActionMaskEnvMutliDiscrete(gym.Env):
+class MultiDiscreteUnbalancedActionMaskEnv(gym.Env):
     metadata = {'render.modes': ['human', 'system', 'none']}
 
     def __init__(self):
@@ -77,7 +77,7 @@ class DummyActionMaskEnvMutliDiscrete(gym.Env):
         self.valid_actions = valid_actions
         self.counter += 1
 
-        return self.state(), 1, self.finish(), {'valid_actions': self.flat_action_mask()}
+        return self.state(), 1, self.finish(), {'action_mask': self.valid_actions}
 
     def render(self, mode='human'):
         pass
@@ -88,10 +88,4 @@ class DummyActionMaskEnvMutliDiscrete(gym.Env):
     def state(self):
         tmp = np.reshape(np.array([*range(100)]), self.observation_shape)
         obs = tmp / 100
-        return [obs]
-
-    def flat_action_mask(self):
-        flat = []
-        for mask in self.valid_actions:
-            flat.extend(mask)
-        return flat
+        return obs

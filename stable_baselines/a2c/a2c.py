@@ -10,7 +10,7 @@ from stable_baselines.common import explained_variance, tf_util, ActorCriticRLMo
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.a2c.utils import discount_with_dones, Scheduler, mse, \
-    total_episode_reward_logger
+    total_episode_reward_logger, flatten_action_mask
 from stable_baselines.ppo2.ppo2 import safe_mean
 
 
@@ -316,6 +316,7 @@ class A2CRunner(AbstractEnvRunner):
         """
         super(A2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
+        self.action_masks = None
 
     def run(self):
         """
@@ -329,7 +330,8 @@ class A2CRunner(AbstractEnvRunner):
         ep_infos = []
 
         for _ in range(self.n_steps):
-            actions, values, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_mask)
+            actions, values, states, _ = self.model.step(self.obs, self.states, self.dones,
+                                                         action_mask=self.action_masks)
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_values.append(values)
@@ -339,27 +341,34 @@ class A2CRunner(AbstractEnvRunner):
             if isinstance(self.env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
             obs, rewards, dones, infos = self.env.step(clipped_actions)
-            for info in infos:
+
+            for i, info in enumerate(infos):
                 maybe_ep_info = info.get('episode')
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
-                # Did the env tell us what actions are valid?
-                if isinstance(self.env.action_space, gym.spaces.Discrete) or \
-                        isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
-                    if info.get('valid_actions') is not None:
-                        self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                        mb_action_masks.append(self.action_mask)
-                        self.action_mask = np.expand_dims(self.action_mask, axis=0)
+
+                # Did the env(s) tell us what actions are valid?
+                env_action_mask = info.get('action_mask')
+                if env_action_mask is not None:
+                    if isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                        if self.action_masks is None:
+                            self.action_masks = [None] * self.env.num_envs
+                        self.action_masks[i] = flatten_action_mask(env_action_mask)
+                    elif isinstance(self.env.action_space, gym.spaces.Discrete):
+                        if self.action_masks is None:
+                            self.action_masks = [None] * self.env.num_envs
+                        self.action_masks[i] = env_action_mask
                     else:
-                        self.action_mask = None
-                elif info.get('valid_actions') is not None:
-                    raise NotImplementedError("Action masking is not supported for {} "
-                                              "action spaces!".format(type(self.env.action_space)))
+                        if env_action_mask is not None:
+                            raise NotImplementedError("Action masking is not supported for {} "
+                                                      "action spaces!".format(type(self.env.action_space)))
 
             self.states = states
             self.dones = dones
             self.obs = obs
             mb_rewards.append(rewards)
+            mb_action_masks.append(self.action_masks if self.action_masks is not None else [])
+
         mb_dones.append(self.dones)
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype).swapaxes(1, 0).reshape(self.batch_ob_shape)
@@ -367,6 +376,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_actions = np.asarray(mb_actions, dtype=self.env.action_space.dtype).swapaxes(0, 1)
         mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(0, 1)
         mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
+        mb_action_masks = np.asarray(mb_action_masks, dtype=np.float32)
         mb_masks = mb_dones[:, :-1]
         mb_dones = mb_dones[:, 1:]
         true_rewards = np.copy(mb_rewards)
@@ -386,5 +396,6 @@ class A2CRunner(AbstractEnvRunner):
         mb_actions = mb_actions.reshape(-1, *mb_actions.shape[2:])
         mb_values = mb_values.reshape(-1, *mb_values.shape[2:])
         mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])
+        mb_action_masks = mb_action_masks.reshape(-1, *mb_action_masks.shape[2:])
         true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
         return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, mb_action_masks, ep_infos, true_rewards

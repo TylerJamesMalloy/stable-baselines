@@ -12,7 +12,7 @@ from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
-from stable_baselines.a2c.utils import total_episode_reward_logger
+from stable_baselines.a2c.utils import total_episode_reward_logger, flatten_action_mask
 
 
 class PPO2(ActorCriticRLModel):
@@ -254,7 +254,7 @@ class PPO2(ActorCriticRLModel):
         :param obs: (np.ndarray) The current observation of the environment
         :param returns: (np.ndarray) the rewards
         :param masks: (np.ndarray) The last masks for done episodes (used in recurent policies)
-        :param actionexpans: (np.ndarray) the actions
+        :param actions: (np.ndarray) the actions
         :param values: (np.ndarray) the values
         :param neglogpacs: (np.ndarray) Negative Log-likelihood probability of Actions
         :param update: (int) the current step iteration
@@ -271,18 +271,12 @@ class PPO2(ActorCriticRLModel):
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
                   self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
 
-        # if action_masks is not None:
-        #     if len(action_masks) == 0:
-        #         action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-        # else:
-        #     action_masks = self.train_model.action_mask_check(None, self.train_model.action_mask_ph.shape[0])
-
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
 
         if self.train_model.action_mask_ph is not None and len(action_masks) != 0:
-            td_map[self.train_model.action_mask_ph] = action_masks
+            td_map[self.train_model.action_mask_ph] = self.train_model.prepare_action_mask(action_masks)
 
         if cliprange_vf is not None and cliprange_vf >= 0:
             td_map[self.clip_range_vf_ph] = cliprange_vf
@@ -356,10 +350,15 @@ class PPO2(ActorCriticRLModel):
                                                                             self.n_batch + start) // batch_size)
                             end = start + batch_size
                             mbinds = inds[start:end]
-                            slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, writer=writer,
-                                                                 update=timestep, cliprange_vf=cliprange_vf_now,
-                                                                 action_masks=action_masks[start:end]))
+                            slices = (arr[mbinds] for arr in (obs, returns, masks, actions,
+                                                              values, neglogpacs))
+                            if len(action_masks) != 0:
+                                tmp_action_mask = action_masks[start:end]
+                            else:
+                                tmp_action_mask = []
+                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, tmp_action_mask,
+                                                                 writer=writer, update=timestep,
+                                                                 cliprange_vf=cliprange_vf_now))
                 else:  # recurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs // self.n_steps + 1
                     assert self.n_envs % self.nminibatches == 0
@@ -374,12 +373,17 @@ class PPO2(ActorCriticRLModel):
                             end = start + envs_per_batch
                             mb_env_inds = env_indices[start:end]
                             mb_flat_inds = flat_indices[mb_env_inds].ravel()
-                            slices = (arr[mb_flat_inds] for arr in (obs, returns, masks, actions, values, neglogpacs))
+                            slices = (arr[mb_flat_inds] for arr in (obs, returns, masks, actions,
+                                                                    values, neglogpacs))
+                            if len(action_masks) != 0:
+                                tmp_action_mask = action_masks[mb_flat_inds]
+                            else:
+                                tmp_action_mask = action_masks
+                            print(tmp_action_mask)
                             mb_states = states[mb_env_inds]
-                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, update=timestep,
-                                                                 writer=writer, states=mb_states,
-                                                                 cliprange_vf=cliprange_vf_now,
-                                                                 action_masks=action_masks[start:end]))
+                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, tmp_action_mask,
+                                                                 update=timestep, writer=writer, states=mb_states,
+                                                                 cliprange_vf=cliprange_vf_now))
 
                 loss_vals = np.mean(mb_loss_vals, axis=0)
                 t_now = time.time()
@@ -455,6 +459,7 @@ class Runner(AbstractEnvRunner):
         super().__init__(env=env, model=model, n_steps=n_steps)
         self.lam = lam
         self.gamma = gamma
+        self.action_masks = None
 
     def run(self):
         """
@@ -475,10 +480,9 @@ class Runner(AbstractEnvRunner):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs, mb_action_masks = [], [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
-
         for _ in range(self.n_steps):
             actions, values, self.states, neglogpacs = self.model.step(self.obs, self.states, self.dones,
-                                                                       action_mask=self.action_mask)
+                                                                       action_mask=self.action_masks)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
             mb_values.append(values)
@@ -489,23 +493,32 @@ class Runner(AbstractEnvRunner):
             if isinstance(self.env.action_space, gym.spaces.Box):
                 clipped_actions = np.clip(actions, self.env.action_space.low, self.env.action_space.high)
             self.obs[:], rewards, self.dones, infos = self.env.step(clipped_actions)
-            for info in infos:
-                if info.get('episode') is not None:
-                    ep_infos.append(info.get('episode'))
-                # Did the env tell us what actions are valid?
-                if isinstance(self.env.action_space, gym.spaces.Discrete) or \
-                        isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
-                    if info.get('valid_actions') is not None:
-                        self.action_mask = np.array(info.get('valid_actions'), dtype=np.float)
-                        mb_action_masks.append(self.action_mask)
-                        self.action_mask = np.expand_dims(self.action_mask, axis=0)
-                    else:
-                        self.action_mask = None
-                elif info.get('valid_actions') is not None:
-                    raise NotImplementedError("Action masking is not supported for {} "
-                                              "action spaces!".format(type(self.env.action_space)))
 
+            for i, info in enumerate(infos):
+                maybe_ep_info = info.get('episode')
+                if maybe_ep_info is not None:
+                    ep_infos.append(maybe_ep_info)
+
+                # Did the env(s) tell us what actions are valid?
+                env_action_mask = info.get('action_mask')
+                if env_action_mask is not None:
+                    # Did the env(s) tell us what actions are valid?
+                    if isinstance(self.env.action_space, gym.spaces.MultiDiscrete):
+                        if self.action_masks is None:
+                            self.action_masks = [None] * self.env.num_envs
+                        self.action_masks[i] = flatten_action_mask(env_action_mask)
+                    elif isinstance(self.env.action_space, gym.spaces.Discrete):
+                        if self.action_masks is None:
+                            self.action_masks = [None] * self.env.num_envs
+                        self.action_masks[i] = env_action_mask
+                    else:
+                        if env_action_mask is not None:
+                            raise NotImplementedError("Action masking is not supported for {} "
+                                                      "action spaces!".format(type(self.env.action_space)))
             mb_rewards.append(rewards)
+            if self.action_masks is not None:
+                mb_action_masks.append(self.action_masks)
+
         # batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
@@ -513,6 +526,7 @@ class Runner(AbstractEnvRunner):
         mb_values = np.asarray(mb_values, dtype=np.float32)
         mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
+        mb_action_masks = np.asarray(mb_action_masks, dtype=np.float32)
         last_values = self.model.value(self.obs, self.states, self.dones)
         # discount/bootstrap off value fn
         mb_advs = np.zeros_like(mb_rewards)
@@ -528,9 +542,12 @@ class Runner(AbstractEnvRunner):
             delta = mb_rewards[step] + self.gamma * nextvalues * nextnonterminal - mb_values[step]
             mb_advs[step] = last_gae_lam = delta + self.gamma * self.lam * nextnonterminal * last_gae_lam
         mb_returns = mb_advs + mb_values
-
         mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward = \
-            map(swap_and_flatten, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, true_reward))
+            map(swap_and_flatten,
+                (mb_obs, mb_returns, mb_dones, mb_actions, mb_values,
+                 mb_neglogpacs, true_reward))
+        if len(mb_action_masks) != 0:
+            mb_action_masks = swap_and_flatten(mb_action_masks)
         return mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs, mb_states, ep_infos, true_reward, \
                mb_action_masks
 
