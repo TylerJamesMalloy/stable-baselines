@@ -35,7 +35,6 @@ class Buffer(object):
         self.mus = None
         self.dones = None
         self.masks = None
-        self.action_masks = None
 
         # Size indexes
         self.next_idx = 0
@@ -87,7 +86,7 @@ class Buffer(object):
             obs = obs.transpose((2, 1, 3, 0))
         return np.reshape(obs, [n_env, (n_steps + 1)] + obs_dim[:-1] + [obs_dim[-1]])
 
-    def put(self, enc_obs, actions, rewards, mus, dones, masks, action_mask):
+    def put(self, enc_obs, actions, rewards, mus, dones, masks):
         """
         Adds a frame to the buffer
         
@@ -109,7 +108,6 @@ class Buffer(object):
             self.mus = np.empty([self.size] + list(mus.shape), dtype=np.float32)
             self.dones = np.empty([self.size] + list(dones.shape), dtype=np.bool)
             self.masks = np.empty([self.size] + list(masks.shape), dtype=np.bool)
-            self.action_masks = np.empty([self.size] + list(action_mask.shape), dtype=np.bool)
 
         self.enc_obs[self.next_idx] = enc_obs
         self.actions[self.next_idx] = actions
@@ -117,7 +115,6 @@ class Buffer(object):
         self.mus[self.next_idx] = mus
         self.dones[self.next_idx] = dones
         self.masks[self.next_idx] = masks
-        self.action_masks[self.next_idx] = action_mask
 
         self.next_idx = (self.next_idx + 1) % self.size
         self.num_in_buffer = min(self.size, self.num_in_buffer + 1)

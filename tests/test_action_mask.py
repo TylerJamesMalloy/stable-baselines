@@ -76,39 +76,6 @@ def test_action_mask_run_a2c(vec_env, policy, env_class):
     env.close()
 
 
-# @pytest.mark.slow
-# @pytest.mark.parametrize('vec_env', VEC_ENVS)
-# @pytest.mark.parametrize('policy', POLICIES)
-# @pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
-# def test_action_mask_learn_acer(vec_env, policy, env_class):
-#     env = vec_env([env_class] * 4)
-#
-#     model = ACER(policy, env, verbose=0)
-#     model.learn(total_timesteps=1000)
-#     env.close()
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize('vec_env', VEC_ENVS)
-@pytest.mark.parametrize('policy', POLICIES)
-@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
-def test_action_mask_run_acer(vec_env, policy, env_class):
-    env = vec_env([env_class])
-
-    model = ACER(policy, env, verbose=0)
-
-    obs, done, action_masks = env.reset(), [False], None
-    while not done[0]:
-        action, _states = model.predict(obs, action_mask=action_masks)
-        obs, _, done, infos = env.step(action)
-
-        for info in infos:
-            env_action_mask = info.get('action_mask')
-            action_masks = np.expand_dims(np.asarray(env_action_mask), axis=0)
-
-    env.close()
-
-
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', VEC_ENVS)
 @pytest.mark.parametrize('policy', POLICIES)
