@@ -2,12 +2,13 @@ import pytest
 import numpy as np
 
 from stable_baselines.common.vec_env import DummyVecEnv, SubprocVecEnv
-from stable_baselines import PPO2, A2C, ACER, ACKTR
-from stable_baselines.common.action_mask_env import DiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv
+from stable_baselines import PPO2, A2C, ACKTR
+from stable_baselines.common.action_mask_env import DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv,\
+    MultiDiscreteUnbalancedActionMaskEnv
 
 VEC_ENVS = [DummyVecEnv, SubprocVecEnv]
 POLICIES = ["MlpPolicy", "MlpLstmPolicy"]
-ENVS = [DiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv]
+ENVS = [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv]
 
 
 @pytest.mark.slow
@@ -79,7 +80,7 @@ def test_action_mask_run_a2c(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', VEC_ENVS)
 @pytest.mark.parametrize('policy', POLICIES)
-@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv])
 def test_action_mask_learn_acktr(vec_env, policy, env_class):
     env = vec_env([env_class] * 4)
 
@@ -91,7 +92,7 @@ def test_action_mask_learn_acktr(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', VEC_ENVS)
 @pytest.mark.parametrize('policy', POLICIES)
-@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv])
 def test_action_mask_run_acktr(vec_env, policy, env_class):
     env = vec_env([env_class])
 

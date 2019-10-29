@@ -363,7 +363,7 @@ class BaseRLModel(ABC):
         pass
 
     @abstractmethod
-    def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
+    def action_probability(self, observation, state=None, mask=None, actions=None, logp=False, action_mask=None):
         """
         If ``actions`` is ``None``, then get the model's action probability distribution from a given observation.
 
@@ -385,6 +385,7 @@ class BaseRLModel(ABC):
             (set to None to return the complete action probability distribution)
         :param logp: (bool) (OPTIONAL) When specified with actions, returns probability in log-space.
             This has no effect if actions is None.
+        :param action_mask: ([bool]) (OPTIONAL) The action mask to be applied
         :return: (np.ndarray) the model's (log) action probability
         """
         pass
@@ -778,7 +779,7 @@ class ActorCriticRLModel(BaseRLModel):
 
         return clipped_actions, states
 
-    def action_probability(self, observation, action_mask=None, state=None, mask=None, actions=None, logp=False):
+    def action_probability(self, observation, state=None, mask=None, actions=None, logp=False, action_mask=None):
         if state is None:
             state = self.initial_state
         if mask is None:

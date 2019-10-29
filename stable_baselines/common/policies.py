@@ -191,7 +191,7 @@ class BasePolicy(ABC):
         :param obs: ([float] or [int]) The current observation of the environment
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
-        :param action_mask: ([bool]) The action mask
+        :param action_mask: ([bool]) The action mask to be applied (used in some discrete action spaces)
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
         raise NotImplementedError
@@ -211,9 +211,15 @@ class BasePolicy(ABC):
 
     @staticmethod
     def prepare_action_mask(action_mask):
+        """
+        Remap the values of the action mask, replacing 0s with -np.inf, and 1s with 0s.
+
+        :param action_mask: ([bool]) The raw action mask from the environment
+        :return: ([float]) The converted action mask, as an np array
+        """
         action_mask = np.array(action_mask, dtype=np.float32)
-        action_mask[action_mask <= 0] = -np.inf
-        action_mask[action_mask > 0] = 0
+        action_mask[action_mask == 0] = -np.inf
+        action_mask[action_mask == 1] = 0
         return action_mask
 
 
@@ -247,7 +253,6 @@ class ActorCriticPolicy(BasePolicy):
             assert self.policy is not None and self.proba_distribution is not None and self.value_fn is not None
             if isinstance(self.proba_distribution, CategoricalProbabilityDistribution) or \
                     isinstance(self.proba_distribution, MultiCategoricalProbabilityDistribution):
-                self.proba_distribution.create_action_mask()
                 self._action_mask_ph = self.proba_distribution.action_mask_ph
             self._action = self.proba_distribution.sample()
             self._deterministic_action = self.proba_distribution.mode()
@@ -319,6 +324,7 @@ class ActorCriticPolicy(BasePolicy):
         :param state: ([float]) The last states (used in recurrent policies)
         :param mask: ([float]) The last masks (used in recurrent policies)
         :param deterministic: (bool) Whether or not to return deterministic actions.
+        :param action_mask: ([bool]) The action mask to be applied (used in some discrete action spaces)
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
         raise NotImplementedError

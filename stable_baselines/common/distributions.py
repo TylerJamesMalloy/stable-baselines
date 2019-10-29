@@ -280,28 +280,24 @@ class BernoulliProbabilityDistributionType(ProbabilityDistributionType):
 
 
 class CategoricalProbabilityDistribution(ProbabilityDistribution):
-    def __init__(self, logits):
+    def __init__(self, logits, action_mask=None):
         """
         Probability distributions from categorical input
 
         :param logits: ([float]) the categorical logits input
         """
         self.logits = logits
-        self._action_mask_ph = None
+        if action_mask is None:
+            with tf.variable_scope("input", reuse=False):
+                no_mask = tf.zeros_like(self.logits)
+                self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
+        else:
+            self._action_mask_ph = action_mask
         super(CategoricalProbabilityDistribution, self).__init__()
 
     @property
     def action_mask_ph(self):
         return self._action_mask_ph
-
-    def create_action_mask(self):
-        with tf.variable_scope("input", reuse=False):
-            no_mask = tf.zeros_like(self.logits)
-            self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
-
-    def slice_action_mask(self, action_mask, start):
-        self._action_mask_ph = action_mask[:, start:start+self.logits.shape[-1]]
-
 
     def flatparam(self):
         return self.logits
@@ -372,14 +368,9 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
         with tf.variable_scope("input", reuse=False):
             no_mask = tf.zeros_like(self.flat)
             self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.flat.shape, name="action_ph")
-        self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1)))
+        self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1),
+                                     tf.split(self.action_mask_ph, nvec, axis=-1)))
         super(MultiCategoricalProbabilityDistribution, self).__init__()
-
-    def create_action_mask(self):
-        prev = 0
-        for categorical in self.categoricals:
-            categorical.slice_action_mask(self.action_mask_ph, prev)
-            prev = prev + categorical.logits.shape[-1]
 
     @property
     def action_mask_ph(self):
