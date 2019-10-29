@@ -47,9 +47,6 @@ def validate_probtype(probtype, pdparam):
     mval_ph = probtype.param_placeholder([number_samples])
     xval_ph = probtype.sample_placeholder([number_samples])
     proba_distribution = probtype.proba_distribution_from_flat(mval_ph)
-    if isinstance(proba_distribution, CategoricalProbabilityDistribution) or \
-            isinstance(proba_distribution, MultiCategoricalProbabilityDistribution):
-        proba_distribution.create_action_mask()
     calcloglik = tf_util.function([xval_ph, mval_ph], proba_distribution.logp(xval_ph))
     calcent = tf_util.function([mval_ph], proba_distribution.entropy())
     xval = tf.get_default_session().run(proba_distribution.sample(), feed_dict={mval_ph: mval})
