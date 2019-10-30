@@ -17,7 +17,6 @@ from stable_baselines.common.misc_util import flatten_action_mask
 def strip(var, n_envs, n_steps, flat=False):
     """
     Removes the last step in the batch
-
     :param var: (TensorFlow Tensor) The input Tensor
     :param n_envs: (int) The number of environments
     :param n_steps: (int) The number of steps to run for each environment
@@ -31,7 +30,6 @@ def strip(var, n_envs, n_steps, flat=False):
 def q_retrace(rewards, dones, q_i, values, rho_i, n_envs, n_steps, gamma):
     """
     Calculates the target Q-retrace
-
     :param rewards: ([TensorFlow Tensor]) The rewards
     :param dones: ([TensorFlow Tensor])
     :param q_i: ([TensorFlow Tensor]) The Q values for actions taken
@@ -63,17 +61,14 @@ def q_retrace(rewards, dones, q_i, values, rho_i, n_envs, n_steps, gamma):
 class ACER(ActorCriticRLModel):
     """
     The ACER (Actor-Critic with Experience Replay) model class, https://arxiv.org/abs/1611.01224
-
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) The discount value
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
     :param num_procs: (int) The number of threads for TensorFlow operations
-
         .. deprecated:: 2.9.0
             Use `n_cpu_tf_sess` instead.
-
     :param q_coef: (float) The weight for the loss on the Q value
     :param ent_coef: (float) The weight for the entropic loss
     :param max_grad_norm: (float) The clipping value for the maximum gradient
@@ -434,7 +429,6 @@ class ACER(ActorCriticRLModel):
     def _train_step(self, obs, actions, rewards, dones, mus, states, masks, steps, writer=None):
         """
         applies a training step to the model
-
         :param obs: ([float]) The input observations
         :param actions: ([float]) The actions taken
         :param rewards: ([float]) The rewards from the environment
@@ -593,7 +587,6 @@ class _Runner(AbstractEnvRunner):
     def __init__(self, env, model, n_steps):
         """
         A runner to learn the policy of an environment for a model
-
         :param env: (Gym environment) The environment to learn from
         :param model: (Model) The model to learn
         :param n_steps: (int) The number of steps to run for each environment
@@ -636,7 +629,6 @@ class _Runner(AbstractEnvRunner):
     def run(self):
         """
         Run a step leaning of the model
-
         :return: ([float], [float], [float], [float], [float], [bool], [float])
                  encoded observation, observations, actions, rewards, mus, dones, masks
         """

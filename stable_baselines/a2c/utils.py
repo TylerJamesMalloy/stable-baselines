@@ -587,17 +587,3 @@ def total_episode_reward_logger(rew_acc, rewards, masks, writer, steps):
                 rew_acc[env_idx] = sum(rewards[env_idx, dones_idx[-1, 0]:])
 
     return rew_acc
-
-
-def flatten_action_mask(action_mask):
-    """
-    Flatten a list of action masks provided by MultiDiscrete spacs
-
-    :param action_mask: (List) List of lists for the valid actions for a MultiDiscrete space
-    :return: (List) (n, action_space.n) A 2-D vector with the action masks concatenated into one vector
-    """
-    flatten = []
-    for mask in action_mask:
-        for action in mask:
-            flatten.append(action)
-    return flatten

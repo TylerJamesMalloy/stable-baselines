@@ -20,15 +20,12 @@ from stable_baselines.ppo2.ppo2 import safe_mean
 class ACKTR(ActorCriticRLModel):
     """
     The ACKTR (Actor Critic using Kronecker-Factored Trust Region) model class, https://arxiv.org/abs/1708.05144
-
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
     :param nprocs: (int) The number of threads for TensorFlow operations
-
         .. deprecated:: 2.9.0
             Use `n_cpu_tf_sess` instead.
-
     :param n_steps: (int) The number of steps to run for each environment
     :param ent_coef: (float) The weight for the entropic loss
     :param vf_coef: (float) The weight for the loss on the value function
@@ -221,10 +218,9 @@ class ACKTR(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, obs, states, rewards, masks, actions, values, action_masks, update, writer):
+    def _train_step(self, obs, states, rewards, masks, actions, values, update, writer):
         """
         applies a training step to the model
-
         :param obs: ([float]) The input observations
         :param states: ([float]) The states (used for recurrent policies)
         :param rewards: ([float]) The rewards from the environment
@@ -261,9 +257,6 @@ class ACKTR(ActorCriticRLModel):
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
-
-        if self.train_model.action_mask_ph is not None and len(action_masks) != 0:
-            td_map[self.train_model.action_mask_ph] = action_masks
 
         if writer is not None:
             # run loss backprop with summary, but once every 10 runs save the metadata (memory, compute time, ...)
@@ -343,13 +336,12 @@ class ACKTR(ActorCriticRLModel):
                 # true_reward is the reward without discount
                 if isinstance(runner, PPO2Runner):
                     # We are using GAE
-                    obs, returns, masks, actions, values, action_masks, states, ep_infos, true_reward = runner.run()
+                    obs, returns, masks, actions, values, _, states, ep_infos, true_reward = runner.run()
                 else:
-                    obs, states, returns, masks, actions, values, action_masks, ep_infos, true_reward = runner.run()
+                    obs, states, returns, masks, actions, values, ep_infos, true_reward = runner.run()
 
                 ep_info_buf.extend(ep_infos)
                 policy_loss, value_loss, policy_entropy = self._train_step(obs, states, returns, masks, actions, values,
-                                                                           action_masks,
                                                                            self.num_timesteps // (self.n_batch + 1),
                                                                            writer)
                 n_seconds = time.time() - t_start
