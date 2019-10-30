@@ -18,6 +18,7 @@ class PPO2(ActorCriticRLModel):
     """
     Proximal Policy Optimization algorithm (GPU version).
     Paper: https://arxiv.org/abs/1707.06347
+    
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
@@ -249,6 +250,7 @@ class PPO2(ActorCriticRLModel):
                     writer, states=None, cliprange_vf=None):
         """
         Training of PPO2 Algorithm
+
         :param learning_rate: (float) learning rate
         :param cliprange: (float) Clipping factor
         :param obs: (np.ndarray) The current observation of the environment
@@ -434,6 +436,7 @@ class Runner(AbstractEnvRunner):
     def __init__(self, *, env, model, n_steps, gamma, lam):
         """
         A runner to learn the policy of an environment for a model
+
         :param env: (Gym environment) The environment to learn from
         :param model: (Model) The model to learn
         :param n_steps: (int) The number of steps to run for each environment
@@ -448,6 +451,7 @@ class Runner(AbstractEnvRunner):
     def run(self):
         """
         Run a learning step of the model
+
         :return:
             - observations: (np.ndarray) the observations
             - rewards: (np.ndarray) the rewards
@@ -518,6 +522,7 @@ def get_schedule_fn(value_schedule):
     """
     Transform (if needed) learning rate and clip range
     to callable.
+
     :param value_schedule: (callable or float)
     :return: (function)
     """
@@ -535,6 +540,7 @@ def get_schedule_fn(value_schedule):
 def swap_and_flatten(arr):
     """
     swap and then flatten axes 0 and 1
+
     :param arr: (np.ndarray)
     :return: (np.ndarray)
     """
@@ -546,6 +552,7 @@ def constfn(val):
     """
     Create a function that returns a constant
     It is useful for learning rate schedule (to avoid code duplication)
+
     :param val: (float)
     :return: (function)
     """
@@ -560,6 +567,7 @@ def safe_mean(arr):
     """
     Compute the mean of an array if there is at least one element.
     For empty array, return nan. It is used for logging only.
+
     :param arr: (np.ndarray)
     :return: (float)
     """

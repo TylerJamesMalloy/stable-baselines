@@ -57,6 +57,10 @@ def mpi_rank_or_zero():
         return 0
 
 def flatten_action_mask(action_space, env_action_mask):
+    """
+    Return action mask after flattening.
+    :return: (list or None)
+    """
     if isinstance(action_space, gym.spaces.MultiDiscrete) and env_action_mask is not None:
         return np.concatenate(env_action_mask)
     elif isinstance(action_space, gym.spaces.MultiDiscrete):

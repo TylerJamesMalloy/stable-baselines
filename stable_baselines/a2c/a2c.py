@@ -17,6 +17,7 @@ from stable_baselines.ppo2.ppo2 import safe_mean
 class A2C(ActorCriticRLModel):
     """
     The A2C (Advantage Actor Critic) model class, https://arxiv.org/abs/1602.01783
+
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
@@ -181,6 +182,7 @@ class A2C(ActorCriticRLModel):
     def _train_step(self, obs, states, rewards, masks, actions, values, update, writer=None):
         """
         applies a training step to the model
+
         :param obs: ([float]) The input observations
         :param states: ([float]) The states (used for recurrent policies)
         :param rewards: ([float]) The rewards from the environment
@@ -309,6 +311,7 @@ class A2CRunner(AbstractEnvRunner):
     def __init__(self, env, model, n_steps=5, gamma=0.99):
         """
         A runner to learn the policy of an environment for an a2c model
+
         :param env: (Gym environment) The environment to learn from
         :param model: (Model) The model to learn
         :param n_steps: (int) The number of steps to run for each environment
@@ -321,6 +324,7 @@ class A2CRunner(AbstractEnvRunner):
     def run(self):
         """
         Run a learning step of the model
+
         :return: ([float], [float], [float], [bool], [float], [float])
                  observations, states, rewards, masks, actions, values
         """
@@ -380,3 +384,4 @@ class A2CRunner(AbstractEnvRunner):
         mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])
         true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
         return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, ep_infos, true_rewards
+        

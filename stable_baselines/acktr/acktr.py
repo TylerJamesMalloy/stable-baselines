@@ -20,12 +20,15 @@ from stable_baselines.ppo2.ppo2 import safe_mean
 class ACKTR(ActorCriticRLModel):
     """
     The ACKTR (Actor Critic using Kronecker-Factored Trust Region) model class, https://arxiv.org/abs/1708.05144
+
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor
     :param nprocs: (int) The number of threads for TensorFlow operations
+
         .. deprecated:: 2.9.0
             Use `n_cpu_tf_sess` instead.
+
     :param n_steps: (int) The number of steps to run for each environment
     :param ent_coef: (float) The weight for the entropic loss
     :param vf_coef: (float) The weight for the loss on the value function
@@ -221,6 +224,7 @@ class ACKTR(ActorCriticRLModel):
     def _train_step(self, obs, states, rewards, masks, actions, values, update, writer):
         """
         applies a training step to the model
+        
         :param obs: ([float]) The input observations
         :param states: ([float]) The states (used for recurrent policies)
         :param rewards: ([float]) The rewards from the environment
@@ -407,3 +411,4 @@ class ACKTR(ActorCriticRLModel):
         params_to_save = self.get_parameters()
 
         self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
+        
