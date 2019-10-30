@@ -122,7 +122,7 @@ class BasePolicy(ABC):
             if add_action_ph:
                 self._action_ph = tf.placeholder(dtype=ac_space.dtype, shape=(n_batch,) + ac_space.shape,
                                                  name="action_ph")
-            self._action_mask_ph = None
+            self._action_mask_ph = tf.placeholder(dtype=tf.float32, shape=(None,), name="action_mask_ph")
         self.sess = sess
         self.reuse = reuse
         self.ob_space = ob_space

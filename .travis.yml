@@ -22,11 +22,8 @@ jobs:
   include:
     # Big test suite. Run in parallel to decrease wall-clock time, and to avoid OOM error from leaks
     - stage: Test
-      name: "Unit Tests a"
-      env: TEST_GLOB="a*"
-
-    - name: "Unit Tests b-h"
-      env: TEST_GLOB="[b-h]*"
+      name: "Unit Tests a-h"
+      env: TEST_GLOB="[a-h]*"
 
     - name: "Unit Tests i-l"
       env: TEST_GLOB="[i-l]*"
@@ -39,6 +36,9 @@ jobs:
 
     - name: "Unit Tests determinism"
       env: TEST_GLOB="0deterministic.py"
+
+    - name: "Unit Tests action mask"
+      env: TEST_GLOB="0action_mask.py"
 
     - name: "Sphinx Documentation"
       script:

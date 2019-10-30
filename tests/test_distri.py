@@ -62,7 +62,7 @@ def validate_probtype(probtype, pdparam):
     mval2_ph = probtype.param_placeholder([number_samples])
     action_mask_ph2 = probtype.param_placeholder([number_samples])
     action_mask_ph2 = tf.placeholder_with_default(tf.zeros_like(action_mask_ph2), shape=np.shape(action_mask_ph2))
-    pd2 = probtype.proba_distribution_from_flat(mval2_ph, action_mask_ph=action_mask_ph2)
+    pd2 = probtype.proba_distribution_from_flat(mval2_ph)
     tmp = pdparam + np.random.randn(pdparam.size) * 0.1
     mval2 = np.repeat(tmp[None, :], number_samples, axis=0)
     calckl = tf_util.function([mval_ph, mval2_ph], proba_distribution.kl(pd2))
