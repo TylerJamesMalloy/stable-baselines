@@ -2,9 +2,11 @@ import numpy as np
 import tensorflow as tf
 
 import stable_baselines.common.tf_util as tf_util
-from stable_baselines.common.distributions import DiagGaussianProbabilityDistributionType,\
+from stable_baselines.common.distributions import DiagGaussianProbabilityDistributionType, \
     CategoricalProbabilityDistributionType, \
     MultiCategoricalProbabilityDistributionType, BernoulliProbabilityDistributionType
+from stable_baselines.common.distributions import CategoricalProbabilityDistribution, \
+    MultiCategoricalProbabilityDistribution
 
 
 @tf_util.in_session
@@ -46,7 +48,7 @@ def validate_probtype(probtype, pdparam):
     action_mask_ph = probtype.param_placeholder([number_samples])
     action_mask_ph = tf.placeholder_with_default(tf.zeros_like(action_mask_ph), shape=np.shape(action_mask_ph))
     xval_ph = probtype.sample_placeholder([number_samples])
-    proba_distribution = probtype.proba_distribution_from_flat(mval_ph, action_mask_ph=action_mask_ph)
+    proba_distribution = probtype.proba_distribution_from_flat(mval_ph)
     calcloglik = tf_util.function([xval_ph, mval_ph], proba_distribution.logp(xval_ph))
     calcent = tf_util.function([mval_ph], proba_distribution.entropy())
     xval = tf.get_default_session().run(proba_distribution.sample(), feed_dict={mval_ph: mval})

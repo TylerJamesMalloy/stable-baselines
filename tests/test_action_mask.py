@@ -5,7 +5,7 @@ import warnings
 from stable_baselines.common.policies import MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy
 from stable_baselines.common.vec_env import  SubprocVecEnv, DummyVecEnv
 from stable_baselines import PPO1, PPO2, A2C, ACER, ACKTR, TRPO
-from stable_baselines.common.action_mask_env import DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2
+from stable_baselines.common.action_mask_env import DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 warnings.filterwarnings("ignore")
@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_learn_ppo1(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -24,7 +24,7 @@ def test_action_mask_learn_ppo1(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_run_ppo1(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -45,7 +45,7 @@ def test_action_mask_run_ppo1(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_learn_ppo2(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
@@ -56,7 +56,7 @@ def test_action_mask_learn_ppo2(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_run_ppo2(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -77,7 +77,7 @@ def test_action_mask_run_ppo2(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_learn_a2c(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
@@ -88,7 +88,7 @@ def test_action_mask_learn_a2c(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_run_a2c(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -109,7 +109,7 @@ def test_action_mask_run_a2c(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
 def test_action_mask_learn_acer(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
@@ -120,7 +120,7 @@ def test_action_mask_learn_acer(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
 def test_action_mask_run_acer(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -141,7 +141,7 @@ def test_action_mask_run_acer(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
 def test_action_mask_learn_acktr(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
@@ -152,7 +152,7 @@ def test_action_mask_learn_acktr(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy, MlpLstmPolicy, MlpLnLstmPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv])
 def test_action_mask_run_acktr(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -173,7 +173,7 @@ def test_action_mask_run_acktr(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_learn_trpo(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
@@ -184,7 +184,7 @@ def test_action_mask_learn_trpo(vec_env, policy, env_class):
 @pytest.mark.slow
 @pytest.mark.parametrize('vec_env', [SubprocVecEnv, DummyVecEnv])
 @pytest.mark.parametrize('policy', [MlpPolicy])
-@pytest.mark.parametrize('env_class', [DiscreteEnv, MultiDiscreteEnv1, MultiDiscreteEnv2])
+@pytest.mark.parametrize('env_class', [DiscreteActionMaskEnv, MultiDiscreteActionMaskEnv, MultiDiscreteUnbalancedActionMaskEnv])
 def test_action_mask_run_trpo(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
