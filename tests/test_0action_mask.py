@@ -18,7 +18,7 @@ def test_action_mask_learn_ppo1(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = PPO1(policy, env, verbose=0)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow
@@ -50,7 +50,7 @@ def test_action_mask_learn_ppo2(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = PPO2(policy, env, verbose=0, nminibatches=2)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow
@@ -82,7 +82,7 @@ def test_action_mask_learn_a2c(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = A2C(policy, env, verbose=0)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow
@@ -114,7 +114,7 @@ def test_action_mask_learn_acer(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = ACER(policy, env, verbose=0)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow
@@ -146,7 +146,7 @@ def test_action_mask_learn_acktr(vec_env, policy, env_class):
     env = vec_env([lambda: env_class() for i in range(2)])
 
     model = ACKTR(policy, env, verbose=0)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow
@@ -178,7 +178,7 @@ def test_action_mask_learn_trpo(vec_env, policy, env_class):
     env = vec_env([lambda: env_class()])
 
     model = TRPO(policy, env, verbose=0)
-    model.learn(total_timesteps = 500)
+    model.learn(total_timesteps=500)
     env.close()
 
 @pytest.mark.slow

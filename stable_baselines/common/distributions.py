@@ -226,7 +226,7 @@ class DiagGaussianProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return DiagGaussianProbabilityDistribution
 
-    def proba_distribution_from_flat(self, flat, **kwargs):
+    def proba_distribution_from_flat(self, flat):
         """
         returns the probability distribution from flat probabilities
 
@@ -235,7 +235,7 @@ class DiagGaussianProbabilityDistributionType(ProbabilityDistributionType):
         """
         return self.probability_distribution_class()(flat)
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
         mean = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
         logstd = tf.get_variable(name='pi/logstd', shape=[1, self.size], initializer=tf.zeros_initializer())
         pdparam = tf.concat([mean, mean * 0.0 + logstd], axis=1)
@@ -264,7 +264,7 @@ class BernoulliProbabilityDistributionType(ProbabilityDistributionType):
     def probability_distribution_class(self):
         return BernoulliProbabilityDistribution
 
-    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0, **kwargs):
+    def proba_distribution_from_latent(self, pi_latent_vector, vf_latent_vector, init_scale=1.0, init_bias=0.0):
         pdparam = linear(pi_latent_vector, 'pi', self.size, init_scale=init_scale, init_bias=init_bias)
         q_values = linear(vf_latent_vector, 'q', self.size, init_scale=init_scale, init_bias=init_bias)
         return self.proba_distribution_from_flat(pdparam), pdparam, q_values

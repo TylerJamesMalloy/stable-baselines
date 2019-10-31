@@ -5,9 +5,6 @@ import stable_baselines.common.tf_util as tf_util
 from stable_baselines.common.distributions import DiagGaussianProbabilityDistributionType, \
     CategoricalProbabilityDistributionType, \
     MultiCategoricalProbabilityDistributionType, BernoulliProbabilityDistributionType
-from stable_baselines.common.distributions import CategoricalProbabilityDistribution, \
-    MultiCategoricalProbabilityDistribution
-
 
 @tf_util.in_session
 def test_probtypes():
