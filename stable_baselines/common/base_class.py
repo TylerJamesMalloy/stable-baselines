@@ -780,11 +780,17 @@ class ActorCriticRLModel(BaseRLModel):
             state = self.initial_state
         if mask is None:
             mask = [False for _ in range(self.n_envs)]
+
+        action_masks = []
+        if action_mask is not None:
+            for env_action_mask in action_mask:
+                action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
+
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
 
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        actions_proba = self.proba_step(observation, state, mask, action_mask)
+        actions_proba = self.proba_step(observation, state, mask, action_masks)
 
         if len(actions_proba) == 0:  # empty list means not implemented
             warnings.warn("Warning: action probability is not implemented for {} action space. Returning None."
