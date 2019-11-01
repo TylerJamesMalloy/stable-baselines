@@ -313,6 +313,11 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         # Note: we can't use sparse_softmax_cross_entropy_with_logits because
         #       the implementation does not allow second-order derivatives...
         one_hot_actions = tf.one_hot(x, self.logits.get_shape().as_list()[-1])
+
+        # Convert 0 to 1 and -inf to 0
+        # [0, -inf, 0] = [1, 0, 1]
+        action_mask_ph = tf.cast(tf.math.is_finite(self.action_mask_ph), dtype=tf.float32)
+        self.logits = tf.multiply(self.logits, action_mask_ph)
         return tf.nn.softmax_cross_entropy_with_logits_v2(
             logits=self.logits,
             labels=tf.stop_gradient(one_hot_actions))
