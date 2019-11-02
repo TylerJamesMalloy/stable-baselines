@@ -328,8 +328,14 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         return tf.reduce_sum(p_0 * (a_0 - tf.log(z_0) - a_1 + tf.log(z_1)), axis=-1)
 
     def entropy(self):
-        a_0 = self.logits - tf.reduce_max(self.logits, axis=-1, keepdims=True)
+        # Convert 0 to 1 and -inf to 0
+        # [0, -inf, 0] = [1, 0, 1]
+        action_mask_ph = tf.cast(tf.math.is_finite(self.action_mask_ph), dtype=tf.float32)
+        
+        logits = tf.multiply(self.logits, action_mask_ph)
+        a_0 = logits - tf.reduce_max(logits, axis=-1, keepdims=True)
         exp_a_0 = tf.exp(a_0)
+        exp_a_0 = tf.multiply(exp_a_0, action_mask_ph)
         z_0 = tf.reduce_sum(exp_a_0, axis=-1, keepdims=True)
         p_0 = exp_a_0 / z_0
         return tf.reduce_sum(p_0 * (tf.log(z_0) - a_0), axis=-1)
