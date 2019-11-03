@@ -318,9 +318,19 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         # [0, -inf, 0] = [1, 0, 1]
         action_mask_ph = tf.cast(tf.math.is_finite(self.action_mask_ph), dtype=tf.float32)
         self.logits = tf.multiply(self.logits, action_mask_ph)
-        return tf.nn.softmax_cross_entropy_with_logits_v2(
-            logits=self.logits,
-            labels=tf.stop_gradient(one_hot_actions))
+
+        # Calculate softmax and correct the invalid action probability to 0
+        softmax = tf.nn.softmax(self.logits)
+        exp_logits = softmax * tf.reduce_sum(tf.math.exp(self.logits), axis=-1, keepdims=True)
+        exp_logits = tf.multiply(exp_logits, action_mask_ph)
+        softmax = exp_logits / tf.reduce_sum(exp_logits, axis=-1, keepdims=True)
+
+        softmax_log = -tf.log(softmax)
+        # Replace inf with 0
+        softmax_log = tf.where(tf.is_finite(softmax_log), softmax_log, tf.zeros_like(softmax_log))
+        softmax_cross_entropy = tf.reduce_sum(tf.multiply(softmax_log, one_hot_actions), axis=-1)
+
+        return softmax_cross_entropy
 
     def kl(self, other):
         a_0 = self.logits - tf.reduce_max(self.logits, axis=-1, keepdims=True)
