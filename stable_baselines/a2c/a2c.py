@@ -179,7 +179,7 @@ class A2C(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, obs, states, rewards, masks, actions, values, update, writer=None):
+    def _train_step(self, obs, states, rewards, masks, actions, values, action_masks, update, writer=None):
         """
         applies a training step to the model
 
@@ -189,6 +189,7 @@ class A2C(ActorCriticRLModel):
         :param masks: ([bool]) Whether or not the episode is over (used for recurrent policies)
         :param actions: ([float]) The actions taken
         :param values: ([float]) The logits values
+        :param action_masks: (np.ndarray) Mask invalid actions
         :param update: (int) the current step iteration
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: (float, float, float) policy loss, value loss, policy entropy
@@ -200,6 +201,7 @@ class A2C(ActorCriticRLModel):
         assert cur_lr is not None, "Error: the observation input array cannon be empty"
 
         td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
+                  self.train_model.action_mask_ph: action_masks,
                   self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
         if states is not None:
             td_map[self.train_model.states_ph] = states
@@ -244,9 +246,9 @@ class A2C(ActorCriticRLModel):
             t_start = time.time()
             for update in range(1, total_timesteps // self.n_batch + 1):
                 # true_reward is the reward without discount
-                obs, states, rewards, masks, actions, values, ep_infos, true_reward = runner.run()
+                obs, states, rewards, masks, actions, values, ep_infos, true_reward, action_masks = runner.run()
                 ep_info_buf.extend(ep_infos)
-                _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values,
+                _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values, action_masks,
                                                                  self.num_timesteps // self.n_batch, writer)
                 n_seconds = time.time() - t_start
                 fps = int((update * self.n_batch) / n_seconds)
@@ -319,7 +321,6 @@ class A2CRunner(AbstractEnvRunner):
         """
         super(A2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
-        self.action_masks = []
 
     def run(self):
         """
@@ -328,7 +329,7 @@ class A2CRunner(AbstractEnvRunner):
         :return: ([float], [float], [float], [bool], [float], [float])
                  observations, states, rewards, masks, actions, values
         """
-        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
+        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_action_masks = [], [], [], [], [], []
         mb_states = self.states
         ep_infos = []
         for _ in range(self.n_steps):
@@ -337,6 +338,7 @@ class A2CRunner(AbstractEnvRunner):
             mb_actions.append(actions)
             mb_values.append(values)
             mb_dones.append(self.dones)
+            mb_action_masks.append(self.action_masks.copy())
             clipped_actions = actions
             # Clip the actions to avoid out of bound error
             if isinstance(self.env.action_space, gym.spaces.Box):
@@ -363,6 +365,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_actions = np.asarray(mb_actions, dtype=self.env.action_space.dtype).swapaxes(0, 1)
         mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(0, 1)
         mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
+        mb_action_masks = np.asfarray(mb_action_masks, dtype=np.float32)
         mb_masks = mb_dones[:, :-1]
         mb_dones = mb_dones[:, 1:]
         true_rewards = np.copy(mb_rewards)
@@ -382,6 +385,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_actions = mb_actions.reshape(-1, *mb_actions.shape[2:])
         mb_values = mb_values.reshape(-1, *mb_values.shape[2:])
         mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])
+        mb_action_masks = mb_action_masks.reshape(-1, *mb_action_masks.shape[2:])
         true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
-        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, ep_infos, true_rewards
+        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, ep_infos, true_rewards, mb_action_masks
         
