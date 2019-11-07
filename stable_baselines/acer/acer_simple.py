@@ -70,7 +70,7 @@ class ACER(ActorCriticRLModel):
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
     :param num_procs: (int) The number of threads for TensorFlow operations
-    
+
         .. deprecated:: 2.9.0
             Use `n_cpu_tf_sess` instead.
 
@@ -520,10 +520,6 @@ class ACER(ActorCriticRLModel):
                 dones = dones.reshape([runner.n_batch])
                 masks = masks.reshape([runner.batch_ob_shape[0]])
                 action_masks = action_masks.reshape(runner.action_mask_shape)
-                print(len(obs))
-                print(len(actions))
-                print(len(rewards))
-                print(len(action_masks))
 
                 names_ops, values_ops = self._train_step(obs, actions, rewards, dones, mus, self.initial_state, masks,
                                                          self.num_timesteps, action_masks, writer)

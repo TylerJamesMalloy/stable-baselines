@@ -2,7 +2,6 @@ import gym
 import numpy as np
 
 from stable_baselines.common.vec_env import VecEnv
-from stable_baselines.common.misc_util import flatten_action_mask
 
 
 def traj_segment_generator(policy, env, horizon, reward_giver=None, gail=False):

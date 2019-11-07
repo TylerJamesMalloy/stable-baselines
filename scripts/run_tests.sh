@@ -1,2 +1,2 @@
 #!/bin/bash
-python -m pytest --cov-config .coveragerc --cov-report html --cov-report term --cov=. -v -n 5
+python -m pytest --cov-config .coveragerc --cov-report html --cov-report term --cov=. -v

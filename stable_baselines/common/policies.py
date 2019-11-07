@@ -209,20 +209,6 @@ class BasePolicy(ABC):
         """
         raise NotImplementedError
 
-    @staticmethod
-    def prepare_action_mask(action_mask):
-        """
-        Remap the values of the action mask, replacing 0s with -np.inf, and 1s with 0s.
-
-        :param action_mask: ([bool]) The raw action mask from the environment
-        :return: ([float]) The converted action mask, as an np array
-        """
-        
-        action_mask = np.array(action_mask, dtype=np.float32)
-        action_mask[action_mask == 0] = -np.inf
-        action_mask[action_mask == 1] = 0
-        return action_mask
-
 
 class ActorCriticPolicy(BasePolicy):
     """
@@ -368,11 +354,11 @@ class RecurrentActorCriticPolicy(ActorCriticPolicy):
                                                          n_batch, reuse=reuse, scale=scale)
 
         with tf.variable_scope("input", reuse=False):
-            self._dones_ph = tf.placeholder(tf.float32, (n_batch,), name="dones_ph")  # (done t-1)
-            state_ph_shape = (self.n_env,) + tuple(state_shape)
+            self._dones_ph = tf.placeholder(tf.float32, (n_batch, ), name="dones_ph")  # (done t-1)
+            state_ph_shape = (self.n_env, ) + tuple(state_shape)
             self._states_ph = tf.placeholder(tf.float32, state_ph_shape, name="states_ph")
 
-        initial_state_shape = (self.n_env,) + tuple(state_shape)
+        initial_state_shape = (self.n_env, ) + tuple(state_shape)
         self._initial_state = np.zeros(initial_state_shape, dtype=np.float32)
 
     @property
@@ -427,7 +413,7 @@ class LstmPolicy(RecurrentActorCriticPolicy):
                  **kwargs):
         # state_shape = [n_lstm * 2] dim because of the cell and hidden states of the LSTM
         super(LstmPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                         state_shape=(2 * n_lstm,), reuse=reuse,
+                                         state_shape=(2 * n_lstm, ), reuse=reuse,
                                          scale=(feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
@@ -527,7 +513,7 @@ class LstmPolicy(RecurrentActorCriticPolicy):
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
         feed_dict = {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask}
         if action_mask is not None and len(action_mask) != 0:
-            feed_dict[self.action_mask_ph] = self.prepare_action_mask(action_mask)
+            feed_dict[self.action_mask_ph] = np.array(action_mask, dtype=np.float32)
 
         if deterministic:
             return self.sess.run([self.deterministic_action, self.value_flat, self.snew, self.neglogp],
@@ -539,7 +525,7 @@ class LstmPolicy(RecurrentActorCriticPolicy):
     def proba_step(self, obs, state=None, mask=None, action_mask=None):
         feed_dict = {self.obs_ph: obs, self.states_ph: state, self.dones_ph: mask}
         if action_mask is not None and len(action_mask) != 0:
-            feed_dict[self.action_mask_ph] = self.prepare_action_mask(action_mask)
+            feed_dict[self.action_mask_ph] = np.array(action_mask, dtype=np.float32)
         return self.sess.run(self.policy_proba, feed_dict)
 
     def value(self, obs, state=None, mask=None):
@@ -602,7 +588,7 @@ class FeedForwardPolicy(ActorCriticPolicy):
     def step(self, obs, state=None, mask=None, deterministic=False, action_mask=None):
         feed_dict = {self.obs_ph: obs}
         if action_mask is not None and len(action_mask) != 0:
-            feed_dict[self.action_mask_ph] = self.prepare_action_mask(action_mask)
+            feed_dict[self.action_mask_ph] = np.array(action_mask, dtype=np.float32)
         if deterministic:
             action, value, neglogp = self.sess.run([self.deterministic_action, self.value_flat, self.neglogp],
                                                    feed_dict)
@@ -614,7 +600,7 @@ class FeedForwardPolicy(ActorCriticPolicy):
     def proba_step(self, obs, state=None, mask=None, action_mask=None):
         feed_dict = {self.obs_ph: obs}
         if action_mask is not None and len(action_mask) != 0:
-            feed_dict[self.action_mask_ph] = self.prepare_action_mask(action_mask)
+            feed_dict[self.action_mask_ph] = np.array(action_mask, dtype=np.float32)
         return self.sess.run(self.policy_proba, feed_dict)
 
     def value(self, obs, state=None, mask=None):

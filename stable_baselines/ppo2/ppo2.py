@@ -18,7 +18,7 @@ class PPO2(ActorCriticRLModel):
     """
     Proximal Policy Optimization algorithm (GPU version).
     Paper: https://arxiv.org/abs/1707.06347
-    
+
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
     :param gamma: (float) Discount factor

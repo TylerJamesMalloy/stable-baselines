@@ -388,4 +388,3 @@ class A2CRunner(AbstractEnvRunner):
         mb_action_masks = mb_action_masks.reshape(-1, *mb_action_masks.shape[2:])
         true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
         return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, ep_infos, true_rewards, mb_action_masks
-        
