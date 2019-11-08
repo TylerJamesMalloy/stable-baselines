@@ -365,7 +365,7 @@ class A2CRunner(AbstractEnvRunner):
         mb_actions = np.asarray(mb_actions, dtype=self.env.action_space.dtype).swapaxes(0, 1)
         mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(0, 1)
         mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
-        mb_action_masks = np.asfarray(mb_action_masks, dtype=np.float32)
+        mb_action_masks = np.asfarray(mb_action_masks, dtype=np.float32).swapaxes(0, 1)
         mb_masks = mb_dones[:, :-1]
         mb_dones = mb_dones[:, 1:]
         true_rewards = np.copy(mb_rewards)

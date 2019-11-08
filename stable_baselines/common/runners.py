@@ -23,9 +23,9 @@ class AbstractEnvRunner(ABC):
         self.dones = [False for _ in range(n_env)]
 
         if isinstance(self.env.action_space, MultiDiscrete):
-            self.action_masks = [np.zeros(sum(self.env.action_space.nvec)) for _ in range(n_env)]
+            self.action_masks = [np.ones(sum(self.env.action_space.nvec)) for _ in range(n_env)]
         elif isinstance(self.env.action_space, Discrete):
-            self.action_masks = [np.zeros(self.env.action_space.n) for _ in range(n_env)] 
+            self.action_masks = [np.ones(self.env.action_space.n) for _ in range(n_env)] 
         else:
             self.action_masks = [None for _ in range(n_env)] 
 
