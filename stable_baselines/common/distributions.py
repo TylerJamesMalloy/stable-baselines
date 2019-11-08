@@ -289,7 +289,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         self.logits = logits
         if action_mask is None:
             with tf.variable_scope("input", reuse=False):
-                no_mask = tf.zeros_like(self.logits)
+                no_mask = tf.ones_like(self.logits)
                 self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
         else:
             self._action_mask_ph = action_mask
@@ -299,14 +299,23 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
     def action_mask_ph(self):
         return self._action_mask_ph
 
+    @property
+    def confusing_action_mask_ph(self):
+        """
+        Remap the values of the action mask, replacing 0s with -np.inf, and 1s with 0s.
+        """
+        negative_inf_vector = tf.ones_like(self._action_mask_ph, dtype=tf.float32) * -np.inf
+        zero_vector = tf.zeros_like(self._action_mask_ph, dtype=tf.float32)
+        _action_mask_ph = tf.where(tf.cast(self._action_mask_ph, dtype=tf.bool), zero_vector, negative_inf_vector)
+        return _action_mask_ph
+
     def flatparam(self):
         return self.logits
 
     def mode(self):
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        logits = self.logits
-        logits = tf.add(logits, self.action_mask_ph)
+        logits = tf.add(self.logits, self.confusing_action_mask_ph)
         return tf.argmax(logits, axis=-1)
 
     def neglogp(self, x):
@@ -357,7 +366,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        probability = tf.add(probability, self.action_mask_ph)
+        probability = tf.add(probability, self.confusing_action_mask_ph)
         return tf.argmax(probability, axis=-1)
 
     @classmethod
@@ -381,7 +390,7 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
         """
         self.flat = flat
         with tf.variable_scope("input", reuse=False):
-            no_mask = tf.zeros_like(self.flat)
+            no_mask = tf.ones_like(self.flat)
             self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.flat.shape, name="action_ph")
         self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1),
                                      tf.split(self.action_mask_ph, nvec, axis=-1)))

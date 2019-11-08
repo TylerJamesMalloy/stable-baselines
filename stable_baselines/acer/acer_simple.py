@@ -2,7 +2,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
-from gym.spaces import Discrete, Box
+from gym.spaces import Discrete, Box, MultiDiscrete
 
 from stable_baselines import logger
 from stable_baselines.a2c.utils import batch_to_seq, seq_to_batch, Scheduler, EpisodeStats, \
@@ -70,7 +70,7 @@ class ACER(ActorCriticRLModel):
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
     :param num_procs: (int) The number of threads for TensorFlow operations
-    
+
         .. deprecated:: 2.9.0
             Use `n_cpu_tf_sess` instead.
 
@@ -431,7 +431,7 @@ class ACER(ActorCriticRLModel):
 
                 self.summary = tf.summary.merge_all()
 
-    def _train_step(self, obs, actions, rewards, dones, mus, states, masks, steps, writer=None):
+    def _train_step(self, obs, actions, rewards, dones, mus, states, masks, steps, action_masks, writer=None):
         """
         applies a training step to the model
 
@@ -443,12 +443,14 @@ class ACER(ActorCriticRLModel):
         :param states: ([float]) The states (used for recurrent policies)
         :param masks: ([bool]) Whether or not the episode is over (used for recurrent policies)
         :param steps: (int) the number of steps done so far (can be None)
+        :param action_masks: (np.ndarray) Mask invalid actions
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: ([str], [float]) the list of update operation name, and the list of the results of the operations
         """
         cur_lr = self.learning_rate_schedule.value_steps(steps)
         td_map = {self.train_model.obs_ph: obs, self.polyak_model.obs_ph: obs, self.action_ph: actions,
-                  self.reward_ph: rewards, self.done_ph: dones, self.mu_ph: mus, self.learning_rate_ph: cur_lr}
+                  self.reward_ph: rewards, self.done_ph: dones, self.train_model.action_mask_ph: action_masks,
+                  self.mu_ph: mus, self.learning_rate_ph: cur_lr}
 
         if states is not None:
             td_map[self.train_model.states_ph] = states
@@ -498,7 +500,7 @@ class ACER(ActorCriticRLModel):
 
             # n_batch samples, 1 on_policy call and multiple off-policy calls
             for steps in range(0, total_timesteps, self.n_batch):
-                enc_obs, obs, actions, rewards, mus, dones, masks = runner.run()
+                enc_obs, obs, actions, rewards, mus, dones, masks, action_masks = runner.run()
                 episode_stats.feed(rewards, dones)
 
                 if buffer is not None:
@@ -517,9 +519,10 @@ class ACER(ActorCriticRLModel):
                 mus = mus.reshape([runner.n_batch, runner.n_act])
                 dones = dones.reshape([runner.n_batch])
                 masks = masks.reshape([runner.batch_ob_shape[0]])
+                action_masks = action_masks.reshape(runner.action_mask_shape)
 
                 names_ops, values_ops = self._train_step(obs, actions, rewards, dones, mus, self.initial_state, masks,
-                                                         self.num_timesteps, writer)
+                                                         self.num_timesteps, action_masks, writer)
 
                 if callback is not None:
                     # Only stop training if return value is False, not when it is None. This is for backwards
@@ -552,9 +555,10 @@ class ACER(ActorCriticRLModel):
                         mus = mus.reshape([runner.n_batch, runner.n_act])
                         dones = dones.reshape([runner.n_batch])
                         masks = masks.reshape([runner.batch_ob_shape[0]])
+                        action_masks = action_masks.reshape(runner.action_mask_shape)
 
                         self._train_step(obs, actions, rewards, dones, mus, self.initial_state, masks,
-                                         self.num_timesteps)
+                                         self.num_timesteps, action_masks)
 
                 self.num_timesteps += self.n_batch
 
@@ -628,10 +632,16 @@ class _Runner(AbstractEnvRunner):
                 self.batch_ob_shape = (n_env * (n_steps + 1), self.obs_dim)
             self.obs_dtype = np.float32
 
+        if isinstance(self.env.action_space, MultiDiscrete):
+            self.action_mask_shape = (n_env * (n_steps + 1), sum(self.env.action_space.nvec))
+        elif isinstance(self.env.action_space, Discrete):
+            self.action_mask_shape = (n_env * (n_steps + 1), self.env.action_space.n)
+        else:
+            self.action_mask_shape = (n_env * (n_steps + 1),)
+
         self.n_steps = n_steps
         self.states = model.initial_state
         self.dones = [False for _ in range(n_env)]
-        self.action_masks = []
 
     def run(self):
         """
@@ -641,7 +651,7 @@ class _Runner(AbstractEnvRunner):
                  encoded observation, observations, actions, rewards, mus, dones, masks
         """
         enc_obs = [self.obs]
-        mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards = [], [], [], [], []
+        mb_obs, mb_actions, mb_mus, mb_dones, mb_rewards, mb_action_masks = [], [], [], [], [], []
         for _ in range(self.n_steps):
             actions, _, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_masks)
             mus = self.model.proba_step(self.obs, self.states, self.dones)
@@ -649,6 +659,7 @@ class _Runner(AbstractEnvRunner):
             mb_actions.append(actions)
             mb_mus.append(mus)
             mb_dones.append(self.dones)
+            mb_action_masks.append(self.action_masks.copy())
             clipped_actions = actions
             # Clip the actions to avoid out of bound error
             if isinstance(self.env.action_space, Box):
@@ -668,6 +679,7 @@ class _Runner(AbstractEnvRunner):
             enc_obs.append(obs)
         mb_obs.append(np.copy(self.obs))
         mb_dones.append(self.dones)
+        mb_action_masks.append(self.action_masks.copy())
 
         enc_obs = np.asarray(enc_obs, dtype=self.obs_dtype).swapaxes(1, 0)
         mb_obs = np.asarray(mb_obs, dtype=self.obs_dtype).swapaxes(1, 0)
@@ -675,6 +687,7 @@ class _Runner(AbstractEnvRunner):
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
         mb_mus = np.asarray(mb_mus, dtype=np.float32).swapaxes(1, 0)
         mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(1, 0)
+        mb_action_masks = np.asfarray(mb_action_masks, dtype=np.float32).swapaxes(1, 0)
 
         mb_masks = mb_dones  # Used for statefull models like LSTM's to mask state when done
         mb_dones = mb_dones[:, 1:]  # Used for calculating returns. The dones array is now aligned with rewards
@@ -682,4 +695,4 @@ class _Runner(AbstractEnvRunner):
         # shapes are now [nenv, nsteps, []]
         # When pulling from buffer, arrays will now be reshaped in place, preventing a deep copy.
 
-        return enc_obs, mb_obs, mb_actions, mb_rewards, mb_mus, mb_dones, mb_masks
+        return enc_obs, mb_obs, mb_actions, mb_rewards, mb_mus, mb_dones, mb_masks, mb_action_masks

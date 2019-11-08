@@ -139,8 +139,8 @@ class BaseRLModel(ABC):
     def _init_num_timesteps(self, reset_num_timesteps=True):
         """
         Initialize and resets num_timesteps (total timesteps since beginning of training)
-
         if needed. Mainly used logging and plotting (tensorboard).
+
         :param reset_num_timesteps: (bool) Set it to false when continuing training
             to not create new plotting curves in tensorboard.
         :return: (bool) Whether a new tensorboard log needs to be created
@@ -240,7 +240,7 @@ class BaseRLModel(ABC):
             (from the expert dataset)
         - deterministic_actions_ph: e.g., in the case of a gaussian policy,
             the mean.
-            
+
         :return: ((tf.placeholder)) (obs_ph, actions_ph, deterministic_actions_ph)
         """
         pass
@@ -399,7 +399,7 @@ class BaseRLModel(ABC):
         with ``get_parameters`` function. If ``exact_match`` is True, dictionary
         should contain keys for all model's parameters, otherwise RunTimeError
         is raised. If False, only variables included in the dictionary will be updated.
-        
+
         This does not load agent's hyper-parameters.
 
         .. warning::
@@ -649,7 +649,7 @@ class BaseRLModel(ABC):
     def _softmax(x_input):
         """
         An implementation of softmax.
-        
+
         :param x_input: (numpy float) input vector
         :return: (numpy float) output vector
         """
@@ -1098,7 +1098,7 @@ class TensorboardWriter:
         """
         returns the latest run number for the given log name and log path,
         by finding the greatest number in the directories.
-        
+
         :return: (int) latest run number
         """
         max_run_id = 0
