@@ -17,6 +17,7 @@ Breaking Changes:
 New Features:
 ^^^^^^^^^^^^^
 - Add `n_cpu_tf_sess` to model constructor to choose the number of threads used by Tensorflow
+- `VecNormalize` now supports being pickled and unpickled.
 
 Bug Fixes:
 ^^^^^^^^^^
@@ -28,18 +29,22 @@ Deprecations:
 ^^^^^^^^^^^^^
 - `nprocs` (ACKTR) and `num_procs` (ACER) are deprecated in favor of `n_cpu_tf_sess` which is now common
   to all algorithms
+- `VecNormalize`: `load_running_average` and `save_running_average` are deprecated in favour of using pickle.
 
 Others:
 ^^^^^^^
 - Add upper bound for Tensorflow version (<2.0.0).
+- Add pull request template
 
 Documentation:
 ^^^^^^^^^^^^^^
+- Add plotting to the Monitor example (@rusu24edward)
 - Add Snake Game AI project (@pedrohbtp)
 - Add note on the support Tensorflow versions.
 - Remove unnecessary steps required for Windows installation.
 - Add QuaRL project (@srivatsankrishnan)
 - Add Pwnagotchi project (@evilsocket)
+- Fix `result_plotter` example
 
 Release 2.8.0 (2019-09-29)
 --------------------------
