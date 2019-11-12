@@ -41,8 +41,7 @@ class CLAC(OffPolicyRLModel):
     (https://github.com/rail-berkeley/softlearning/) and from the Stable-Baseliens implementation 
     (https://github.com/hill-a/stable-baselines/tree/master/stable_baselines/sac)
 
-    Paper: In Preperation for ICML 2020
-    Introduction to CLAC: https://github.com/TylerJamesMalloy/stable-baselines/tree/master/stable_baselines/clac
+    Paper: In Preperation for ICLR 2020
 
     :param policy: (CLACPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, LnMlpPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
@@ -66,7 +65,7 @@ class CLAC(OffPolicyRLModel):
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
-        Note: this has no effect on SAC logging for now
+        Note: this has no effect on CLAC logging for now
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_starts=100, train_freq=1, batch_size=256,
