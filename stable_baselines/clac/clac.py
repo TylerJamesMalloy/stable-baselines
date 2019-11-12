@@ -66,12 +66,19 @@ class CLAC(OffPolicyRLModel):
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         Note: this has no effect on CLAC logging for now
+    :param beta_update_method: (str) string representation of the method for updating the beta value. Defaults
+        to "clac". Options: (clac, mirl)
+    :param marginal_aprox_method: (str) string representation of the method for approximating the marginal 
+        action distribution for use in estimating mutual infomration. Defaults to "batch". 
+        Options (batch, n-window, running, dnn). Note these may require other parameters. 
+    :param ma_param: (list) list of parameters used in the marginal approximation method 
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, mut_inf_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
+                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False
+                 beta_update_method="clac", marginal_aprox_method="batch", ma_params = None):
 
         super(CLAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                   policy_base=CLACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
@@ -90,7 +97,13 @@ class CLAC(OffPolicyRLModel):
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
         self.gamma = gamma
-        self.learning_rate_phi = 0.001
+        
+        # Options for MI approximation and related parameters 
+        self.learning_rate_phi = learning_rate
+        self.beta_update_method = beta_update_method
+        self.marginal_aprox_method = marginal_aprox_method
+        self.ma_params = ma_params
+
 
         self.value_fn = None
         self.graph = None
