@@ -53,14 +53,14 @@ class CLAC(OffPolicyRLModel):
     :param buffer_size: (int) size of the replay buffer
     :param batch_size: (int) Minibatch size for each gradient update
     :param tau: (float) the soft update coefficient ("polyak update", between 0 and 1)
-    :param mut_inf_coef: (str or float) Mutual Information regularization coefficient. Controlling
+    :param ent_coef: (str or float) Mutual Information regularization coefficient. Controlling
         performance/generalization trade-off. Set it to 'auto' to learn it automatically (still in development)
         (and 'auto_0.1' for using 0.1 as initial value)
     :param train_freq: (int) Update the model every `train_freq` steps.
     :param learning_starts: (int) how many steps of the model to collect transitions for before learning starts
     :param target_update_interval: (int) update the target network every `target_network_update_freq` steps.
     :param gradient_steps: (int) How many gradient update after each step
-    :param target_inf: (str or float) target mutual information when learning mut_inf_coef (mut_inf_coef = 'auto')
+    :param target_entropy: (str or float) target entropy when learning ent_coef (ent_coef = 'auto')
     :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
     :param tensorboard_log: (str) the log location for tensorboard (if None, no logging)
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
@@ -70,7 +70,7 @@ class CLAC(OffPolicyRLModel):
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_starts=100, train_freq=1, batch_size=256,
-                 tau=0.005, mut_inf_coef='auto', target_update_interval=1,
+                 tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
@@ -87,7 +87,7 @@ class CLAC(OffPolicyRLModel):
         # self.policy_lr = learning_rate
         # self.qf_lr = learning_rate
         # self.vf_lr = learning_rate
-        self.mut_inf_coef = mut_inf_coef
+        self.ent_coef = ent_coef
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
         self.gamma = gamma
@@ -123,14 +123,14 @@ class CLAC(OffPolicyRLModel):
         self.learning_rate_ph = None
         self.processed_obs_ph = None
         self.processed_next_obs_ph = None
-        self.log_mut_inf_coef = None
+        self.log_ent_coef = None
         self.logp_phi = None
         self.logp_pi = None
         self.tf_logged_reward = float("-inf")
 
-        self.auto_mut_inf_coef = False
-        if not isinstance(self.mut_inf_coef, float):
-            self.auto_mut_inf_coef = True
+        self.auto_ent_coef = False
+        if not isinstance(self.ent_coef, float):
+            self.auto_ent_coef = True
 
         self.action_history = None
         self.action_entropy = 1
@@ -215,21 +215,21 @@ class CLAC(OffPolicyRLModel):
                     # The entropy coefficient or entropy can be learned automatically
                     # see Automating Entropy Adjustment for Maximum Entropy RL section
                     # of https://arxiv.org/abs/1812.05905
-                    if isinstance(self.mut_inf_coef, str) and self.mut_inf_coef.startswith('auto'):
-                        # Default initial value of mut_inf_coef when learned
+                    if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
+                        # Default initial value of ent_coef when learned
                         init_value = 1.0 # Should this be negative?
-                        if '_' in self.mut_inf_coef:
-                            init_value = float(self.mut_inf_coef.split('_')[1])
-                            assert init_value > 0., "The initial value of mut_inf_coef must be greater than 0"
+                        if '_' in self.ent_coef:
+                            init_value = float(self.ent_coef.split('_')[1])
+                            assert init_value > 0., "The initial value of ent_coef must be greater than 0"
 
-                        self.log_mut_inf_coef = tf.get_variable('log_mut_inf_coef', dtype=tf.float32,
+                        self.log_ent_coef = tf.get_variable('log_ent_coef', dtype=tf.float32,
                                                             initializer=np.log(init_value).astype(np.float32))
-                        self.mut_inf_coef = tf.exp(self.log_mut_inf_coef)
+                        self.ent_coef = tf.exp(self.log_ent_coef)
                     else:
                         # Force conversion to float
                         # this will throw an error if a malformed string (different from 'auto')
                         # is passed
-                        self.mut_inf_coef = float(self.mut_inf_coef)
+                        self.ent_coef = float(self.ent_coef)
 
                 with tf.variable_scope("target", reuse=False):
                     # Create the value network
@@ -254,18 +254,18 @@ class CLAC(OffPolicyRLModel):
 
                     # Compute the entropy temperature loss
                     # it is used when the entropy coefficient is learned
-                    mut_inf_coef_loss, entropy_optimizer = None, None
-                    if not isinstance(self.mut_inf_coef, float):
-                        mut_inf_coef_loss = -tf.reduce_mean(
-                            # self.log_mut_inf_coef * tf.stop_gradient(logp_pi + self.target_entropy))
-                            # self.log_mut_inf_coef * tf.stop_gradient((-1 * (self.logp_phi - logp_pi)) - self.target_entropy))
-                            self.log_mut_inf_coef * tf.stop_gradient(self.logp_phi - logp_pi - self.target_entropy))
+                    ent_coef_loss, entropy_optimizer = None, None
+                    if not isinstance(self.ent_coef, float):
+                        ent_coef_loss = -tf.reduce_mean(
+                            # self.log_ent_coef * tf.stop_gradient(logp_pi + self.target_entropy))
+                            # self.log_ent_coef * tf.stop_gradient((-1 * (self.logp_phi - logp_pi)) - self.target_entropy))
+                            self.log_ent_coef * tf.stop_gradient(self.logp_phi - logp_pi - self.target_entropy))
                         entropy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
 
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
-                    #policy_kl_loss = tf.reduce_mean(self.mut_inf_coef * logp_pi - qf1_pi)
-                    policy_kl_loss = tf.reduce_mean((-1 * self.mut_inf_coef * (self.logp_phi - logp_pi)) - qf1_pi)
+                    #policy_kl_loss = tf.reduce_mean(self.ent_coef * logp_pi - qf1_pi)
+                    policy_kl_loss = tf.reduce_mean((-1 * self.ent_coef * (self.logp_phi - logp_pi)) - qf1_pi)
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -275,11 +275,11 @@ class CLAC(OffPolicyRLModel):
 
                     # We update the vf towards the min of two Q-functions in order to
                     # reduce overestimation bias from function approximation error.
-                    # v_backup = tf.stop_gradient(min_qf_pi - self.mut_inf_coef * logp_pi)
+                    # v_backup = tf.stop_gradient(min_qf_pi - self.ent_coef * logp_pi)
                     # previous tests 
-                    # v_backup = tf.stop_gradient(min_qf_pi - self.mut_inf_coef * (self.logp_phi - logp_pi))
+                    # v_backup = tf.stop_gradient(min_qf_pi - self.ent_coef * (self.logp_phi - logp_pi))
                     # Minimzing mutual information  
-                    v_backup = tf.stop_gradient(min_qf_pi + (self.mut_inf_coef * (self.logp_phi - logp_pi)))
+                    v_backup = tf.stop_gradient(min_qf_pi + (self.ent_coef * (self.logp_phi - logp_pi)))
                     value_loss = 0.5 * tf.reduce_mean((value_fn - v_backup) ** 2)
 
                     values_losses = qf1_loss + qf2_loss + value_loss
@@ -325,18 +325,18 @@ class CLAC(OffPolicyRLModel):
                     with tf.control_dependencies([policy_train_op]):
                         train_values_op = value_optimizer.minimize(values_losses, var_list=values_params)
 
-                        self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy', 'mut_inf_coef_loss', 'log_policy', 'log_marginal']
+                        self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy', 'ent_coef_loss', 'log_policy', 'log_marginal']
                         # All ops to call during one training step
                         self.step_ops = [policy_loss, qf1_loss, qf2_loss,
                                          value_loss, qf1, qf2, value_fn, logp_pi, 
                                          self.entropy, policy_train_op, train_values_op]#, phi_train_op]
 
                         # Add entropy coefficient optimization operation if needed
-                        if mut_inf_coef_loss is not None:
+                        if ent_coef_loss is not None:
                             with tf.control_dependencies([train_values_op]):
-                                mut_inf_coef_op = entropy_optimizer.minimize(mut_inf_coef_loss, var_list=self.log_mut_inf_coef)
-                                self.infos_names += ['mut_inf_coef']
-                                self.step_ops += [mut_inf_coef_op, mut_inf_coef_loss, self.mut_inf_coef]
+                                ent_coef_op = entropy_optimizer.minimize(ent_coef_loss, var_list=self.log_ent_coef)
+                                self.infos_names += ['ent_coef']
+                                self.step_ops += [ent_coef_op, ent_coef_loss, self.ent_coef]
                         
 
                     # Monitor losses and entropy in tensorboard
@@ -345,9 +345,9 @@ class CLAC(OffPolicyRLModel):
                     tf.summary.scalar('qf2_loss', qf2_loss)
                     tf.summary.scalar('value_loss', value_loss)
                     tf.summary.scalar('entropy', self.entropy)
-                    if mut_inf_coef_loss is not None:
-                        tf.summary.scalar('mut_inf_coef_loss', mut_inf_coef_loss)
-                    tf.summary.scalar('mut_inf_coef', self.mut_inf_coef)
+                    if ent_coef_loss is not None:
+                        tf.summary.scalar('ent_coef_loss', ent_coef_loss)
+                    tf.summary.scalar('ent_coef', self.ent_coef)
                     tf.summary.scalar('log_policy', tf.reduce_mean(logp_pi))
                     tf.summary.scalar('log_marginal', tf.reduce_mean(self.logp_phi))
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
@@ -438,9 +438,9 @@ class CLAC(OffPolicyRLModel):
         #qf1, qf2, value_fn, logp_pi, entropy, *_ = values
         entropy = values[4]
 
-        if self.log_mut_inf_coef is not None:
-            mut_inf_coef_loss, mut_inf_coef = values[-2:]
-            return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, mut_inf_coef_loss, mut_inf_coef
+        if self.log_ent_coef is not None:
+            ent_coef_loss, ent_coef = values[-2:]
+            return policy_loss, qf1_loss, qf2_loss, value_loss, entropy, ent_coef_loss, ent_coef
 
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
@@ -474,13 +474,13 @@ class CLAC(OffPolicyRLModel):
                 if(done):
                     env_name = self.env.unwrapped.envs[0].spec.id
                     
-                    mut_inf_coef = self.mut_inf_coef
-                    if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
-                        mut_inf_coef = "auto"
+                    ent_coef = self.ent_coef
+                    if(type(self.ent_coef) == tf.Tensor or np.isnan(ent_coef)):
+                        ent_coef = "auto"
                         # For testing different entropy targets
-                        mut_inf_coef = self.target_entropy
-                    Model_String = "CLAC" + str(mut_inf_coef)
-                    d = {'Episode Reward': episode_reward, 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': episodes, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                        ent_coef = self.target_entropy
+                    Model_String = "CLAC" + str(ent_coef)
+                    d = {'Episode Reward': episode_reward, 'ent_coef': ent_coef, 'Timestep': self.num_timesteps, 'Episode Number': episodes, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
                     DataFrame = DataFrame.append(d, ignore_index = True)
 
                     done = True 
@@ -637,16 +637,16 @@ class CLAC(OffPolicyRLModel):
                                 assert(False)
 
                     Model_String = "CLAC"
-                    if not self.auto_mut_inf_coef:
-                        Model_String = "CLAC " + str(self.mut_inf_coef)
+                    if not self.auto_ent_coef:
+                        Model_String = "CLAC " + str(self.ent_coef)
                     
                     env_name = self.env.unwrapped.envs[0].spec.id
 
-                    mut_inf_coef = self.mut_inf_coef
-                    if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
-                        mut_inf_coef = "auto"
-                    Model_String = "CLAC" + str(mut_inf_coef)
-                    d = {'Episode Reward': episode_rewards[-1], 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                    ent_coef = self.ent_coef
+                    if(type(self.ent_coef) == tf.Tensor or np.isnan(ent_coef)):
+                        ent_coef = "auto"
+                    Model_String = "CLAC" + str(ent_coef)
+                    d = {'Episode Reward': episode_rewards[-1], 'ent_coef': ent_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
                     learning_results = learning_results.append(d, ignore_index = True)
                     
                     self.tf_logged_reward = episode_rewards[-1]
@@ -729,7 +729,7 @@ class CLAC(OffPolicyRLModel):
             "train_freq": self.train_freq,
             "batch_size": self.batch_size,
             "tau": self.tau,
-            "mut_inf_coef": self.mut_inf_coef if isinstance(self.mut_inf_coef, float) else 'auto',
+            "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
             "target_entropy": self.target_entropy,
             "num_timesteps": self.num_timesteps, 
             "replay_buffer": self.replay_buffer,
