@@ -323,21 +323,23 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         # Note: we can't use sparse_softmax_cross_entropy_with_logits because
         #       the implementation does not allow second-order derivatives...
         one_hot_actions = tf.one_hot(x, self.logits.get_shape().as_list()[-1])
+        one_hot_actions = tf.stop_gradient(one_hot_actions)
 
-        # Convert 0 to 1 and -inf to 0
-        # [0, -inf, 0] = [1, 0, 1]
-        action_mask_ph = tf.cast(tf.math.is_finite(self.action_mask_ph), dtype=tf.float32)
-        self.logits = tf.multiply(self.logits, action_mask_ph)
+        # Prevent invalid actions backpropagation
+        self.logits = tf.multiply(self.logits, self.action_mask_ph)
 
         # Calculate softmax and correct the invalid action probability to 0
         softmax = tf.nn.softmax(self.logits)
-        exp_logits = softmax * tf.reduce_sum(tf.math.exp(self.logits), axis=-1, keepdims=True)
-        exp_logits = tf.multiply(exp_logits, action_mask_ph)
+        exp_logits = softmax * tf.reduce_sum(tf.exp(self.logits), axis=-1, keepdims=True)
+        exp_logits = tf.multiply(exp_logits, self.action_mask_ph)
         softmax = exp_logits / tf.reduce_sum(exp_logits, axis=-1, keepdims=True)
 
+        # softmax: [4, 0, 2, 3]
+        # action_mask: [1, 0, 1, 1]
+        # new_softmax: [4, 1, 2, 3]
+        softmax = tf.add(softmax, tf.cast(tf.logical_not(tf.cast(self.action_mask_ph, dtype=tf.bool)), dtype=tf.float32))
+
         softmax_log = -tf.log(softmax)
-        # Replace inf with 0
-        softmax_log = tf.where(tf.is_finite(softmax_log), softmax_log, tf.zeros_like(softmax_log))
         softmax_cross_entropy = tf.reduce_sum(tf.multiply(softmax_log, one_hot_actions), axis=-1)
 
         return softmax_cross_entropy
