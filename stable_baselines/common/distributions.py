@@ -300,8 +300,9 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         return self._action_mask_ph
 
     @property
-    def confusing_action_mask_ph(self):
+    def neginf_action_mask_ph(self):
         """
+        negative inf action mask
         Remap the values of the action mask, replacing 0s with -np.inf, and 1s with 0s.
         """
         negative_inf_vector = tf.ones_like(self._action_mask_ph, dtype=tf.float32) * -np.inf
@@ -315,7 +316,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
     def mode(self):
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        logits = tf.add(self.logits, self.confusing_action_mask_ph)
+        logits = tf.add(self.logits, self.neginf_action_mask_ph)
         return tf.argmax(logits, axis=-1)
 
     def neglogp(self, x):
@@ -366,7 +367,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        probability = tf.add(probability, self.confusing_action_mask_ph)
+        probability = tf.add(probability, self.neginf_action_mask_ph)
         return tf.argmax(probability, axis=-1)
 
     @classmethod
