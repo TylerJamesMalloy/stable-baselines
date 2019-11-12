@@ -289,7 +289,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
         self.logits = logits
         if action_mask is None:
             with tf.variable_scope("input", reuse=False):
-                no_mask = tf.zeros_like(self.logits)
+                no_mask = tf.ones_like(self.logits)
                 self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.logits.shape, name="action_ph")
         else:
             self._action_mask_ph = action_mask
@@ -299,35 +299,47 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
     def action_mask_ph(self):
         return self._action_mask_ph
 
+    @property
+    def neginf_action_mask_ph(self):
+        """
+        negative inf action mask
+        Remap the values of the action mask, replacing 0s with -np.inf, and 1s with 0s.
+        """
+        negative_inf_vector = tf.ones_like(self._action_mask_ph, dtype=tf.float32) * -np.inf
+        zero_vector = tf.zeros_like(self._action_mask_ph, dtype=tf.float32)
+        _action_mask_ph = tf.where(tf.cast(self._action_mask_ph, dtype=tf.bool), zero_vector, negative_inf_vector)
+        return _action_mask_ph
+
     def flatparam(self):
         return self.logits
 
     def mode(self):
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        logits = self.logits
-        logits = tf.add(logits, self.action_mask_ph)
+        logits = tf.add(self.logits, self.neginf_action_mask_ph)
         return tf.argmax(logits, axis=-1)
 
     def neglogp(self, x):
         # Note: we can't use sparse_softmax_cross_entropy_with_logits because
         #       the implementation does not allow second-order derivatives...
         one_hot_actions = tf.one_hot(x, self.logits.get_shape().as_list()[-1])
+        one_hot_actions = tf.stop_gradient(one_hot_actions)
 
-        # Convert 0 to 1 and -inf to 0
-        # [0, -inf, 0] = [1, 0, 1]
-        action_mask_ph = tf.cast(tf.math.is_finite(self.action_mask_ph), dtype=tf.float32)
-        self.logits = tf.multiply(self.logits, action_mask_ph)
+        # Prevent invalid actions backpropagation
+        self.logits = tf.multiply(self.logits, self.action_mask_ph)
 
         # Calculate softmax and correct the invalid action probability to 0
         softmax = tf.nn.softmax(self.logits)
-        exp_logits = softmax * tf.reduce_sum(tf.math.exp(self.logits), axis=-1, keepdims=True)
-        exp_logits = tf.multiply(exp_logits, action_mask_ph)
+        exp_logits = softmax * tf.reduce_sum(tf.exp(self.logits), axis=-1, keepdims=True)
+        exp_logits = tf.multiply(exp_logits, self.action_mask_ph)
         softmax = exp_logits / tf.reduce_sum(exp_logits, axis=-1, keepdims=True)
 
+        # softmax: [4, 0, 2, 3]
+        # action_mask: [1, 0, 1, 1]
+        # new_softmax: [4, 1, 2, 3]
+        softmax = tf.add(softmax, tf.cast(tf.logical_not(tf.cast(self.action_mask_ph, dtype=tf.bool)), dtype=tf.float32))
+
         softmax_log = -tf.log(softmax)
-        # Replace inf with 0
-        softmax_log = tf.where(tf.is_finite(softmax_log), softmax_log, tf.zeros_like(softmax_log))
         softmax_cross_entropy = tf.reduce_sum(tf.multiply(softmax_log, one_hot_actions), axis=-1)
 
         return softmax_cross_entropy
@@ -363,7 +375,7 @@ class CategoricalProbabilityDistribution(ProbabilityDistribution):
 
         # mask: 0 is valid action, -inf is invalid action
         # [1, 2, 3] add [0, -inf, 0] = [1, -inf, 3]
-        probability = tf.add(probability, self.action_mask_ph)
+        probability = tf.add(probability, self.neginf_action_mask_ph)
         return tf.argmax(probability, axis=-1)
 
     @classmethod
@@ -387,7 +399,7 @@ class MultiCategoricalProbabilityDistribution(ProbabilityDistribution):
         """
         self.flat = flat
         with tf.variable_scope("input", reuse=False):
-            no_mask = tf.zeros_like(self.flat)
+            no_mask = tf.ones_like(self.flat)
             self._action_mask_ph = tf.placeholder_with_default(no_mask, shape=self.flat.shape, name="action_ph")
         self.categoricals = list(map(CategoricalProbabilityDistribution, tf.split(flat, nvec, axis=-1),
                                      tf.split(self.action_mask_ph, nvec, axis=-1)))
