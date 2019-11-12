@@ -15,7 +15,7 @@ class GAIL(TRPO):
     :param expert_dataset: (ExpertDataset) the dataset manager
     :param gamma: (float) the discount value
     :param timesteps_per_batch: (int) the number of timesteps to run per batch (horizon)
-    :param max_kl: (float) the kullback leiber loss threashold
+    :param max_kl: (float) the Kullback-Leibler loss threshold
     :param cg_iters: (int) the number of iterations for the conjugate gradient calculation
     :param lam: (float) GAE factor
     :param entcoeff: (float) the weight for the entropy loss
@@ -48,7 +48,7 @@ class GAIL(TRPO):
         if _init_setup_model:
             self.setup_model()
 
-    def learn(self, total_timesteps, callback=None, seed=None, log_interval=100, tb_log_name="GAIL",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="GAIL",
               reset_num_timesteps=True):
         assert self.expert_dataset is not None, "You must pass an expert dataset to GAIL for training"
-        return super().learn(total_timesteps, callback, seed, log_interval, tb_log_name, reset_num_timesteps)
+        return super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps)

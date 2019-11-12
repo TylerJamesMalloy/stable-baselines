@@ -1,6 +1,7 @@
 .. _pretrain:
 
 .. automodule:: stable_baselines.gail
+   :noindex:
 
 
 Pre-Training (Behavior Cloning)
@@ -96,7 +97,7 @@ Using the ``expert_cartpole.npz`` dataset generated with the previous script.
 	# Using only one expert trajectory
 	# you can specify `traj_limitation=-1` for using the whole dataset
 	dataset = ExpertDataset(expert_path='expert_cartpole.npz',
-													traj_limitation=1, batch_size=128)
+	                        traj_limitation=1, batch_size=128)
 
 	model = PPO2('MlpPolicy', 'CartPole-v1', verbose=1)
 	# Pretrain the PPO2 model

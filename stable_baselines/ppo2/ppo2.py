@@ -1,6 +1,5 @@
 import time
 import sys
-import multiprocessing
 from collections import deque
 
 import gym
@@ -11,7 +10,7 @@ import tensorflow as tf
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, ActorCriticRLModel, tf_util, SetVerbosity, TensorboardWriter
 from stable_baselines.common.runners import AbstractEnvRunner
-from stable_baselines.common.policies import LstmPolicy, ActorCriticPolicy
+from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
 from stable_baselines.a2c.utils import total_episode_reward_logger
 
 
@@ -25,7 +24,7 @@ class PPO2(ActorCriticRLModel):
     :param gamma: (float) Discount factor
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
-    :param ent_coef: (float) Entropy coefficient for the loss caculation
+    :param ent_coef: (float) Entropy coefficient for the loss calculation
     :param learning_rate: (float or callable) The learning rate, it can be a function
     :param vf_coef: (float) Value function coefficient for the loss calculation
     :param max_grad_norm: (float) The maximum value for the gradient clipping
@@ -34,24 +33,36 @@ class PPO2(ActorCriticRLModel):
         the number of environments run in parallel should be a multiple of nminibatches.
     :param noptepochs: (int) Number of epoch when optimizing the surrogate
     :param cliprange: (float or callable) Clipping parameter, it can be a function
+    :param cliprange_vf: (float or callable) Clipping parameter for the value function, it can be a function.
+        This is a parameter specific to the OpenAI implementation. If None is passed (default),
+        then `cliprange` (that is used for the policy) will be used.
+        IMPORTANT: this clipping depends on the reward scaling.
+        To deactivate value function clipping (and recover the original PPO implementation),
+        you have to pass a negative value (e.g. -1).
     :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
     :param tensorboard_log: (str) the log location for tensorboard (if None, no logging)
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         WARNING: this logging can take a lot of space quickly
+    :param seed: (int) Seed for the pseudo-random generators (python, numpy, tensorflow).
+        If None (default), use random seed. Note that if you want completely deterministic
+        results, you must set `n_cpu_tf_sess` to 1.
+    :param n_cpu_tf_sess: (int) The number of threads for TensorFlow operations
+        If None, the number of cpu of the current machine will be used.
     """
-
     def __init__(self, policy, env, gamma=0.99, n_steps=128, ent_coef=0.01, learning_rate=2.5e-4, vf_coef=0.5,
-                 max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2, verbose=0,
-                 tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False):
+                 max_grad_norm=0.5, lam=0.95, nminibatches=4, noptepochs=4, cliprange=0.2, cliprange_vf=None,
+                 verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
+                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None):
 
         super(PPO2, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
-                                   _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
+                                   _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
+                                   seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.learning_rate = learning_rate
         self.cliprange = cliprange
+        self.cliprange_vf = cliprange_vf
         self.n_steps = n_steps
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
@@ -107,17 +118,14 @@ class PPO2(ActorCriticRLModel):
 
             self.n_batch = self.n_envs * self.n_steps
 
-            n_cpu = multiprocessing.cpu_count()
-            if sys.platform == 'darwin':
-                n_cpu //= 2
-
             self.graph = tf.Graph()
             with self.graph.as_default():
-                self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
+                self.set_random_seed(self.seed)
+                self.sess = tf_util.make_session(num_cpu=self.n_cpu_tf_sess, graph=self.graph)
 
                 n_batch_step = None
                 n_batch_train = None
-                if issubclass(self.policy, LstmPolicy):
+                if issubclass(self.policy, RecurrentActorCriticPolicy):
                     assert self.n_envs % self.nminibatches == 0, "For recurrent policies, "\
                         "the number of environments run in parallel should be a multiple of nminibatches."
                     n_batch_step = self.n_envs
@@ -143,12 +151,37 @@ class PPO2(ActorCriticRLModel):
                     neglogpac = train_model.proba_distribution.neglogp(self.action_ph)
                     self.entropy = tf.reduce_mean(train_model.proba_distribution.entropy())
 
-                    vpred = train_model._value
-                    vpredclipped = self.old_vpred_ph + tf.clip_by_value(
-                        train_model._value - self.old_vpred_ph, - self.clip_range_ph, self.clip_range_ph)
+                    vpred = train_model.value_flat
+
+                    # Value function clipping: not present in the original PPO
+                    if self.cliprange_vf is None:
+                        # Default behavior (legacy from OpenAI baselines):
+                        # use the same clipping as for the policy
+                        self.clip_range_vf_ph = self.clip_range_ph
+                        self.cliprange_vf = self.cliprange
+                    elif isinstance(self.cliprange_vf, (float, int)) and self.cliprange_vf < 0:
+                        # Original PPO implementation: no value function clipping
+                        self.clip_range_vf_ph = None
+                    else:
+                        # Last possible behavior: clipping range
+                        # specific to the value function
+                        self.clip_range_vf_ph = tf.placeholder(tf.float32, [], name="clip_range_vf_ph")
+
+                    if self.clip_range_vf_ph is None:
+                        # No clipping
+                        vpred_clipped = train_model.value_flat
+                    else:
+                        # Clip the different between old and new value
+                        # NOTE: this depends on the reward scaling
+                        vpred_clipped = self.old_vpred_ph + \
+                            tf.clip_by_value(train_model.value_flat - self.old_vpred_ph,
+                                             - self.clip_range_vf_ph, self.clip_range_vf_ph)
+
+
                     vf_losses1 = tf.square(vpred - self.rewards_ph)
-                    vf_losses2 = tf.square(vpredclipped - self.rewards_ph)
+                    vf_losses2 = tf.square(vpred_clipped - self.rewards_ph)
                     self.vf_loss = .5 * tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+
                     ratio = tf.exp(self.old_neglog_pac_ph - neglogpac)
                     pg_losses = -self.advs_ph * ratio
                     pg_losses2 = -self.advs_ph * tf.clip_by_value(ratio, 1.0 - self.clip_range_ph, 1.0 +
@@ -162,7 +195,7 @@ class PPO2(ActorCriticRLModel):
                     tf.summary.scalar('entropy_loss', self.entropy)
                     tf.summary.scalar('policy_gradient_loss', self.pg_loss)
                     tf.summary.scalar('value_function_loss', self.vf_loss)
-                    tf.summary.scalar('approximate_kullback-leiber', self.approxkl)
+                    tf.summary.scalar('approximate_kullback-leibler', self.approxkl)
                     tf.summary.scalar('clip_factor', self.clipfrac)
                     tf.summary.scalar('loss', loss)
 
@@ -185,6 +218,9 @@ class PPO2(ActorCriticRLModel):
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
                     tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
                     tf.summary.scalar('clip_range', tf.reduce_mean(self.clip_range_ph))
+                    if self.clip_range_vf_ph is not None:
+                        tf.summary.scalar('clip_range_vf', tf.reduce_mean(self.clip_range_vf_ph))
+
                     tf.summary.scalar('old_neglog_action_probabilty', tf.reduce_mean(self.old_neglog_pac_ph))
                     tf.summary.scalar('old_value_pred', tf.reduce_mean(self.old_vpred_ph))
 
@@ -211,7 +247,7 @@ class PPO2(ActorCriticRLModel):
                 self.summary = tf.summary.merge_all()
 
     def _train_step(self, learning_rate, cliprange, obs, returns, masks, actions, values, neglogpacs, update,
-                    writer, states=None):
+                    writer, states=None, cliprange_vf=None):
         """
         Training of PPO2 Algorithm
 
@@ -228,15 +264,20 @@ class PPO2(ActorCriticRLModel):
         :param states: (np.ndarray) For recurrent policies, the internal state of the recurrent model
         :return: policy gradient loss, value function loss, policy entropy,
                 approximation of kl divergence, updated clipping range, training update operation
+        :param cliprange_vf: (float) Clipping factor for the value function
         """
         advs = returns - values
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-        td_map = {self.train_model.obs_ph: obs, self.action_ph: actions, self.advs_ph: advs, self.rewards_ph: returns,
+        td_map = {self.train_model.obs_ph: obs, self.action_ph: actions,
+                  self.advs_ph: advs, self.rewards_ph: returns,
                   self.learning_rate_ph: learning_rate, self.clip_range_ph: cliprange,
                   self.old_neglog_pac_ph: neglogpacs, self.old_vpred_ph: values}
         if states is not None:
             td_map[self.train_model.states_ph] = states
-            td_map[self.train_model.masks_ph] = masks
+            td_map[self.train_model.dones_ph] = masks
+
+        if cliprange_vf is not None and cliprange_vf >= 0:
+            td_map[self.clip_range_vf_ph] = cliprange_vf
 
         if states is None:
             update_fac = self.n_batch // self.nminibatches // self.noptepochs + 1
@@ -263,17 +304,23 @@ class PPO2(ActorCriticRLModel):
 
         return policy_loss, value_loss, policy_entropy, approxkl, clipfrac
 
+<<<<<<< HEAD
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=1, tb_log_name="PPO2",
               reset_num_timesteps=True, randomization=False):
+=======
+    def learn(self, total_timesteps, callback=None, log_interval=1, tb_log_name="PPO2",
+              reset_num_timesteps=True):
+>>>>>>> upstream/master
         # Transform to callable if needed
         self.learning_rate = get_schedule_fn(self.learning_rate)
         self.cliprange = get_schedule_fn(self.cliprange)
+        cliprange_vf = get_schedule_fn(self.cliprange_vf)
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
-            self._setup_learn(seed)
+            self._setup_learn()
 
             runner = Runner(env=self.env, model=self, n_steps=self.n_steps, gamma=self.gamma, lam=self.lam)
             self.episode_reward = np.zeros((self.n_envs,))
@@ -281,16 +328,18 @@ class PPO2(ActorCriticRLModel):
             ep_info_buf = deque(maxlen=100)
             t_first_start = time.time()
 
-            nupdates = total_timesteps // self.n_batch
-            for update in range(1, nupdates + 1):
+            n_updates = total_timesteps // self.n_batch
+            for update in range(1, n_updates + 1):
                 assert self.n_batch % self.nminibatches == 0
                 batch_size = self.n_batch // self.nminibatches
                 t_start = time.time()
-                frac = 1.0 - (update - 1.0) / nupdates
+                frac = 1.0 - (update - 1.0) / n_updates
                 lr_now = self.learning_rate(frac)
-                cliprangenow = self.cliprange(frac)
+                cliprange_now = self.cliprange(frac)
+                cliprange_vf_now = cliprange_vf(frac)
                 # true_reward is the reward without discount
                 obs, returns, masks, actions, values, neglogpacs, states, ep_infos, true_reward = runner.run()
+                self.num_timesteps += self.n_batch
                 ep_info_buf.extend(ep_infos)
                 mb_loss_vals = []
                 if states is None:  # nonrecurrent version
@@ -304,9 +353,8 @@ class PPO2(ActorCriticRLModel):
                             end = start + batch_size
                             mbinds = inds[start:end]
                             slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
-                            mb_loss_vals.append(self._train_step(lr_now, cliprangenow, *slices, writer=writer,
-                                                                 update=timestep))
-                    self.num_timesteps += (self.n_batch * self.noptepochs) // batch_size * update_fac
+                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, writer=writer,
+                                                                 update=timestep, cliprange_vf=cliprange_vf_now))
                 else:  # recurrent version
                     update_fac = self.n_batch // self.nminibatches // self.noptepochs // self.n_steps + 1
                     assert self.n_envs % self.nminibatches == 0
@@ -323,9 +371,9 @@ class PPO2(ActorCriticRLModel):
                             mb_flat_inds = flat_indices[mb_env_inds].ravel()
                             slices = (arr[mb_flat_inds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                             mb_states = states[mb_env_inds]
-                            mb_loss_vals.append(self._train_step(lr_now, cliprangenow, *slices, update=timestep,
-                                                                 writer=writer, states=mb_states))
-                    self.num_timesteps += (self.n_envs * self.noptepochs) // envs_per_batch * update_fac
+                            mb_loss_vals.append(self._train_step(lr_now, cliprange_now, *slices, update=timestep,
+                                                                 writer=writer, states=mb_states,
+                                                                 cliprange_vf=cliprange_vf_now))
 
                 loss_vals = np.mean(mb_loss_vals, axis=0)
                 t_now = time.time()
@@ -340,7 +388,7 @@ class PPO2(ActorCriticRLModel):
                 if self.verbose >= 1 and (update % log_interval == 0 or update == 1):
                     explained_var = explained_variance(values, returns)
                     logger.logkv("serial_timesteps", update * self.n_steps)
-                    logger.logkv("nupdates", update)
+                    logger.logkv("n_updates", update)
                     logger.logkv("total_timesteps", self.num_timesteps)
                     logger.logkv("fps", fps)
                     logger.logkv("explained_variance", float(explained_var))
@@ -360,7 +408,7 @@ class PPO2(ActorCriticRLModel):
 
             return self
 
-    def save(self, save_path):
+    def save(self, save_path, cloudpickle=False):
         data = {
             "gamma": self.gamma,
             "n_steps": self.n_steps,
@@ -372,18 +420,21 @@ class PPO2(ActorCriticRLModel):
             "nminibatches": self.nminibatches,
             "noptepochs": self.noptepochs,
             "cliprange": self.cliprange,
+            "cliprange_vf": self.cliprange_vf,
             "verbose": self.verbose,
             "policy": self.policy,
             "observation_space": self.observation_space,
             "action_space": self.action_space,
             "n_envs": self.n_envs,
+            "n_cpu_tf_sess": self.n_cpu_tf_sess,
+            "seed": self.seed,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
         }
 
-        params = self.sess.run(self.params)
+        params_to_save = self.get_parameters()
 
-        self._save_to_file(save_path, data=data, params=params)
+        self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
 
 
 class Runner(AbstractEnvRunner):
@@ -475,8 +526,9 @@ def get_schedule_fn(value_schedule):
     """
     # If the passed schedule is a float
     # create a constant function
-    if isinstance(value_schedule, float):
-        value_schedule = constfn(value_schedule)
+    if isinstance(value_schedule, (float, int)):
+        # Cast to float to avoid errors
+        value_schedule = constfn(float(value_schedule))
     else:
         assert callable(value_schedule)
     return value_schedule

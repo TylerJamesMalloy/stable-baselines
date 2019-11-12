@@ -1,14 +1,10 @@
-import copy
 import os
-import functools
 import collections
+import functools
 import multiprocessing
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.client import device_lib
-
-from stable_baselines import logger
 
 
 def is_image(tensor):
@@ -22,43 +18,6 @@ def is_image(tensor):
     """
 
     return len(tensor.shape) == 3 and tensor.shape[-1] in [1, 3, 4]
-
-
-def switch(condition, then_expression, else_expression):
-    """
-    Switches between two operations depending on a scalar value (int or bool).
-    Note that both `then_expression` and `else_expression`
-    should be symbolic tensors of the *same shape*.
-
-    :param condition: (TensorFlow Tensor) scalar tensor.
-    :param then_expression: (TensorFlow Operation)
-    :param else_expression: (TensorFlow Operation)
-    :return: (TensorFlow Operation) the switch output
-    """
-    x_shape = copy.copy(then_expression.get_shape())
-    out_tensor = tf.cond(tf.cast(condition, 'bool'),
-                         lambda: then_expression,
-                         lambda: else_expression)
-    out_tensor.set_shape(x_shape)
-    return out_tensor
-
-
-# ================================================================
-# Extras
-# ================================================================
-
-def leaky_relu(tensor, leak=0.2):
-    """
-    Leaky ReLU
-    http://web.stanford.edu/~awni/papers/relu_hybrid_icml2013_final.pdf
-
-    :param tensor: (float) the input value
-    :param leak: (float) the leaking coeficient when the function is saturated
-    :return: (float) Leaky ReLU output
-    """
-    f_1 = 0.5 * (1 + leak)
-    f_2 = 0.5 * (1 - leak)
-    return f_1 * tensor + f_2 * abs(tensor)
 
 
 # ================================================================
@@ -401,99 +360,6 @@ class GetFlat(object):
             return tf.get_default_session().run(self.operation)
         else:
             return self.sess.run(self.operation)
-
-
-def flattenallbut0(tensor):
-    """
-    flatten all the dimension, except from the first one
-
-    :param tensor: (TensorFlow Tensor) the input tensor
-    :return: (TensorFlow Tensor) the flattened tensor
-    """
-    return tf.reshape(tensor, [-1, intprod(tensor.get_shape().as_list()[1:])])
-
-
-# ================================================================
-# Diagnostics
-# ================================================================
-
-def display_var_info(_vars):
-    """
-    log variable information, for debug purposes
-
-    :param _vars: ([TensorFlow Tensor]) the variables
-    """
-    count_params = 0
-    for _var in _vars:
-        name = _var.name
-        if "/Adam" in name or "beta1_power" in name or "beta2_power" in name:
-            continue
-        v_params = np.prod(_var.shape.as_list())
-        count_params += v_params
-        if "/b:" in name or "/biases" in name:
-            continue  # Wx+b, bias is not interesting to look at => count params, but not print
-        logger.info("   %s%s %i params %s" % (name, " " * (55 - len(name)), v_params, str(_var.shape)))
-
-    logger.info("Total model parameters: %0.2f million" % (count_params * 1e-6))
-
-
-def get_available_gpus():
-    """
-    Return a list of all the available GPUs
-
-    :return: ([str]) the GPUs available
-    """
-    # recipe from here:
-    # https://stackoverflow.com/questions/38559755/how-to-get-current-available-gpus-in-tensorflow?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-    local_device_protos = device_lib.list_local_devices()
-    return [x.name for x in local_device_protos if x.device_type == 'GPU']
-
-
-# ================================================================
-# Saving variables
-# ================================================================
-
-def load_state(fname, sess=None, var_list=None):
-    """
-    Load a TensorFlow saved model
-
-    :param fname: (str) the graph name
-    :param sess: (TensorFlow Session) the session, if None: get_default_session()
-    :param var_list: ([TensorFlow Tensor] or dict(str: TensorFlow Tensor)) A list of Variable/SaveableObject,
-        or a dictionary mapping names to SaveableObject`s. If ``None``, defaults to the list of all saveable objects.
-    """
-    if sess is None:
-        sess = tf.get_default_session()
-
-    # avoir crashing when loading the direct name without explicitly adding the root folder
-    if os.path.dirname(fname) == '':
-        fname = os.path.join('./', fname)
-
-    saver = tf.train.Saver(var_list=var_list)
-    saver.restore(sess, fname)
-
-
-def save_state(fname, sess=None, var_list=None):
-    """
-    Save a TensorFlow model
-
-    :param fname: (str) the graph name
-    :param sess: (TensorFlow Session) The tf session, if None, get_default_session()
-    :param var_list: ([TensorFlow Tensor] or dict(str: TensorFlow Tensor)) A list of Variable/SaveableObject,
-        or a dictionary mapping names to SaveableObject`s. If ``None``, defaults to the list of all saveable objects.
-    """
-    if sess is None:
-        sess = tf.get_default_session()
-
-    dir_name = os.path.dirname(fname)
-    # avoir crashing when saving the direct name without explicitly adding the root folder
-    if dir_name == '':
-        dir_name = './'
-        fname = os.path.join(dir_name, fname)
-    os.makedirs(dir_name, exist_ok=True)
-
-    saver = tf.train.Saver(var_list=var_list)
-    saver.save(sess, fname)
 
 
 # ================================================================

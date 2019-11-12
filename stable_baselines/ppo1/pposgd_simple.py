@@ -11,7 +11,7 @@ from stable_baselines.common import Dataset, explained_variance, fmt_row, zipsam
     TensorboardWriter
 from stable_baselines import logger
 import stable_baselines.common.tf_util as tf_util
-from stable_baselines.common.policies import LstmPolicy, ActorCriticPolicy
+from stable_baselines.common.policies import ActorCriticPolicy
 from stable_baselines.common.mpi_adam import MpiAdam
 from stable_baselines.common.mpi_moments import mpi_moments
 from stable_baselines.trpo_mpi.utils import traj_segment_generator, add_vtarg_and_adv, flatten_lists
@@ -42,15 +42,20 @@ class PPO1(ActorCriticRLModel):
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         WARNING: this logging can take a lot of space quickly
+    :param seed: (int) Seed for the pseudo-random generators (python, numpy, tensorflow).
+        If None (default), use random seed. Note that if you want completely deterministic
+        results, you must set `n_cpu_tf_sess` to 1.
+    :param n_cpu_tf_sess: (int) The number of threads for TensorFlow operations
+        If None, the number of cpu of the current machine will be used.
     """
-
     def __init__(self, policy, env, gamma=0.99, timesteps_per_actorbatch=256, clip_param=0.2, entcoeff=0.01,
                  optim_epochs=4, optim_stepsize=1e-3, optim_batchsize=64, lam=0.95, adam_epsilon=1e-5,
-                 schedule='linear', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
+                 schedule='linear', verbose=0, tensorboard_log=None, _init_setup_model=True,
+                 policy_kwargs=None, full_tensorboard_log=False, seed=None, n_cpu_tf_sess=1):
 
         super().__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=False,
-                         _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs)
+                         _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
+                         seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.gamma = gamma
         self.timesteps_per_actorbatch = timesteps_per_actorbatch
@@ -95,7 +100,8 @@ class PPO1(ActorCriticRLModel):
 
             self.graph = tf.Graph()
             with self.graph.as_default():
-                self.sess = tf_util.single_threaded_session(graph=self.graph)
+                self.set_random_seed(self.seed)
+                self.sess = tf_util.make_session(num_cpu=self.n_cpu_tf_sess, graph=self.graph)
 
                 # Construct network for new policy
                 self.policy_pi = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs, 1,
@@ -138,7 +144,7 @@ class PPO1(ActorCriticRLModel):
 
                     # PPO's pessimistic surrogate (L^CLIP)
                     pol_surr = - tf.reduce_mean(tf.minimum(surr1, surr2))
-                    vf_loss = tf.reduce_mean(tf.square(self.policy_pi.value_fn[:, 0] - ret))
+                    vf_loss = tf.reduce_mean(tf.square(self.policy_pi.value_flat - ret))
                     total_loss = pol_surr + pol_entpen + vf_loss
                     losses = [pol_surr, pol_entpen, vf_loss, meankl, meanent]
                     self.loss_names = ["pol_surr", "pol_entpen", "vf_loss", "kl", "ent"]
@@ -146,7 +152,7 @@ class PPO1(ActorCriticRLModel):
                     tf.summary.scalar('entropy_loss', pol_entpen)
                     tf.summary.scalar('policy_gradient_loss', pol_surr)
                     tf.summary.scalar('value_function_loss', vf_loss)
-                    tf.summary.scalar('approximate_kullback-leiber', meankl)
+                    tf.summary.scalar('approximate_kullback-leibler', meankl)
                     tf.summary.scalar('clip_factor', clip_param)
                     tf.summary.scalar('loss', total_loss)
 
@@ -187,15 +193,18 @@ class PPO1(ActorCriticRLModel):
                                                     [self.summary, tf_util.flatgrad(total_loss, self.params)] + losses)
                 self.compute_losses = tf_util.function([obs_ph, old_pi.obs_ph, action_ph, atarg, ret, lrmult],
                                                        losses)
-
+    """
     def learn(self, total_timesteps, callback=None, seed=None, log_interval=100, tb_log_name="PPO1",
               reset_num_timesteps=True, randomization=False):
+    """
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO1",
+              reset_num_timesteps=True):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
-            self._setup_learn(seed)
+            self._setup_learn()
 
             assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the PPO1 model must be " \
                                                                "an instance of common.policies.ActorCriticPolicy."
@@ -242,12 +251,13 @@ class PPO1(ActorCriticRLModel):
                     add_vtarg_and_adv(seg, self.gamma, self.lam)
 
                     # ob, ac, atarg, ret, td1ret = map(np.concatenate, (obs, acs, atargs, rets, td1rets))
-                    obs_ph, action_ph, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
+                    observations, actions = seg["observations"], seg["actions"]
+                    atarg, tdlamret = seg["adv"], seg["tdlamret"]
 
                     # true_rew is the reward without discount
                     if writer is not None:
                         self.episode_reward = total_episode_reward_logger(self.episode_reward,
-                                                                          seg["true_rew"].reshape((self.n_envs, -1)),
+                                                                          seg["true_rewards"].reshape((self.n_envs, -1)),
                                                                           seg["dones"].reshape((self.n_envs, -1)),
                                                                           writer, self.num_timesteps)
 
@@ -256,9 +266,9 @@ class PPO1(ActorCriticRLModel):
 
                     # standardized advantage function estimate
                     atarg = (atarg - atarg.mean()) / atarg.std()
-                    dataset = Dataset(dict(ob=obs_ph, ac=action_ph, atarg=atarg, vtarg=tdlamret),
-                                      shuffle=not issubclass(self.policy, LstmPolicy))
-                    optim_batchsize = self.optim_batchsize or obs_ph.shape[0]
+                    dataset = Dataset(dict(ob=observations, ac=actions, atarg=atarg, vtarg=tdlamret),
+                                      shuffle=not self.policy.recurrent)
+                    optim_batchsize = self.optim_batchsize or observations.shape[0]
 
                     # set old parameter values to new parameter values
                     self.assign_old_eq_new(sess=self.sess)
@@ -336,7 +346,7 @@ class PPO1(ActorCriticRLModel):
 
         return self
 
-    def save(self, save_path):
+    def save(self, save_path, cloudpickle=False):
         data = {
             "gamma": self.gamma,
             "timesteps_per_actorbatch": self.timesteps_per_actorbatch,
@@ -353,10 +363,12 @@ class PPO1(ActorCriticRLModel):
             "observation_space": self.observation_space,
             "action_space": self.action_space,
             "n_envs": self.n_envs,
+            "n_cpu_tf_sess": self.n_cpu_tf_sess,
+            "seed": self.seed,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
         }
 
-        params = self.sess.run(self.params)
+        params_to_save = self.get_parameters()
 
-        self._save_to_file(save_path, data=data, params=params)
+        self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)

@@ -1,6 +1,5 @@
 import sys
 import time
-import multiprocessing
 from collections import deque
 import warnings
 
@@ -8,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 import pandas as pd
 
-from stable_baselines.a2c.utils import find_trainable_variables, total_episode_reward_logger
+from stable_baselines.a2c.utils import total_episode_reward_logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.deepq.replay_buffer import ReplayBuffer
@@ -54,22 +53,35 @@ class SAC(OffPolicyRLModel):
     :param target_update_interval: (int) update the target network every `target_network_update_freq` steps.
     :param gradient_steps: (int) How many gradient update after each step
     :param target_entropy: (str or float) target entropy when learning ent_coef (ent_coef = 'auto')
+    :param action_noise: (ActionNoise) the action noise type (None by default), this can help
+        for hard exploration problem. Cf DDPG for the different action noise type.
+    :param random_exploration: (float) Probability of taking a random action (as in an epsilon-greedy strategy)
+        This is not needed for SAC normally but can help exploring when using HER + SAC.
+        This hack was present in the original OpenAI Baselines repo (DDPG + HER)
     :param verbose: (int) the verbosity level: 0 none, 1 training information, 2 tensorflow debug
     :param tensorboard_log: (str) the log location for tensorboard (if None, no logging)
     :param _init_setup_model: (bool) Whether or not to build the network at the creation of the instance
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         Note: this has no effect on SAC logging for now
+    :param seed: (int) Seed for the pseudo-random generators (python, numpy, tensorflow).
+        If None (default), use random seed. Note that if you want completely deterministic
+        results, you must set `n_cpu_tf_sess` to 1.
+    :param n_cpu_tf_sess: (int) The number of threads for TensorFlow operations
+        If None, the number of cpu of the current machine will be used.
     """
 
     def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
-                 gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
+                 gradient_steps=1, target_entropy='auto', action_noise=None,
+                 random_exploration=0.0, verbose=0, tensorboard_log=None,
+                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
+                 seed=None, n_cpu_tf_sess=None):
 
         super(SAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
-                                  policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
+                                  policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
+                                  seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.buffer_size = buffer_size
         self.learning_rate = learning_rate
@@ -87,6 +99,8 @@ class SAC(OffPolicyRLModel):
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
         self.gamma = gamma
+        self.action_noise = action_noise
+        self.random_exploration = random_exploration
 
         self.auto_ent_coef = False
         if not isinstance(self.ent_coef, float):
@@ -137,10 +151,8 @@ class SAC(OffPolicyRLModel):
         with SetVerbosity(self.verbose):
             self.graph = tf.Graph()
             with self.graph.as_default():
-                n_cpu = multiprocessing.cpu_count()
-                if sys.platform == 'darwin':
-                    n_cpu //= 2
-                self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
+                self.set_random_seed(self.seed)
+                self.sess = tf_util.make_session(num_cpu=self.n_cpu_tf_sess, graph=self.graph)
 
                 self.replay_buffer = ReplayBuffer(self.buffer_size)
 
@@ -218,7 +230,7 @@ class SAC(OffPolicyRLModel):
                     # Take the min of the two Q-Values (Double-Q Learning)
                     min_qf_pi = tf.minimum(qf1_pi, qf2_pi)
 
-                    # Targets for Q and V regression
+                    # Target for Q value regression
                     q_backup = tf.stop_gradient(
                         self.rewards_ph +
                         (1 - self.terminals_ph) * self.gamma * self.value_target
@@ -247,6 +259,8 @@ class SAC(OffPolicyRLModel):
                     # policy_loss = (policy_kl_loss + policy_regularization_loss)
                     policy_loss = policy_kl_loss
 
+
+                    # Target for value fn regression
                     # We update the vf towards the min of two Q-functions in order to
                     # reduce overestimation bias from function approximation error.
                     v_backup = tf.stop_gradient(min_qf_pi - self.ent_coef * logp_pi)
@@ -308,8 +322,8 @@ class SAC(OffPolicyRLModel):
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
 
                 # Retrieve parameters that must be saved
-                self.params = find_trainable_variables("model")
-                self.target_params = find_trainable_variables("target/values_fn/vf")
+                self.params = get_vars("model")
+                self.target_params = get_vars("target/values_fn/vf")
 
                 # Initialize Variables and target network
                 with self.sess.as_default():
@@ -356,15 +370,23 @@ class SAC(OffPolicyRLModel):
 
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
+    """
     def learn(self, total_timesteps, callback=None, seed=None, randomization = 0, 
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True):
+    """
+
+    def learn(self, total_timesteps, callback=None,
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
+
+        if replay_wrapper is not None:
+            self.replay_buffer = replay_wrapper(self.replay_buffer)
 
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
 
-            self._setup_learn(seed)
+            self._setup_learn()
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -372,8 +394,11 @@ class SAC(OffPolicyRLModel):
             current_lr = self.learning_rate(1)
 
             start_time = time.time()
-            episode_rewards = [0.0]
             learning_results = pd.DataFrame()
+            episode_rewards = [0.0]
+            episode_successes = []
+            if self.action_noise is not None:
+                self.action_noise.reset()
             obs = self.env.reset()
             self.episode_reward = np.zeros((1,))
             ep_info_buf = deque(maxlen=100)
@@ -390,13 +415,18 @@ class SAC(OffPolicyRLModel):
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
-                # Afterwards, use the learned policy.
-                if self.num_timesteps < self.learning_starts:
-                    action = self.env.action_space.sample()
+                # Afterwards, use the learned policy
+                # if random_exploration is set to 0 (normal setting)
+                if (self.num_timesteps < self.learning_starts
+                    or np.random.rand() < self.random_exploration):
                     # No need to rescale when sampling random action
-                    rescaled_action = action
+                    rescaled_action = action = self.env.action_space.sample()
                 else:
                     action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                    # Add noise to the action (improve exploration,
+                    # not needed in general)
+                    if self.action_noise is not None:
+                        action = np.clip(action + self.action_noise(), -1, 1)
                     # Rescale from [-1, 1] to the correct bounds
                     rescaled_action = action * np.abs(self.action_space.low)
 
@@ -424,7 +454,10 @@ class SAC(OffPolicyRLModel):
                     mb_infos_vals = []
                     # Update policy, critics and target networks
                     for grad_step in range(self.gradient_steps):
-                        if self.num_timesteps < self.batch_size or self.num_timesteps < self.learning_starts:
+                        # Break if the warmup phase is not over
+                        # or if there are not enough samples in the replay buffer
+                        if not self.replay_buffer.can_sample(self.batch_size) \
+                           or self.num_timesteps < self.learning_starts:
                             break
                         n_updates += 1
                         # Compute current learning_rate
@@ -442,6 +475,8 @@ class SAC(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward
                 if done:
+                    if self.action_noise is not None:
+                        self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
                     
@@ -459,6 +494,10 @@ class SAC(OffPolicyRLModel):
                     learning_results = learning_results.append(d, ignore_index = True)
 
                     episode_rewards.append(0.0)
+
+                    maybe_is_success = info.get('is_success')
+                    if maybe_is_success is not None:
+                        episode_successes.append(float(maybe_is_success))
 
                 if len(episode_rewards[-101:-1]) == 0:
                     mean_reward = -np.inf
@@ -479,6 +518,8 @@ class SAC(OffPolicyRLModel):
                     logger.logkv("current_lr", current_lr)
                     logger.logkv("fps", fps)
                     logger.logkv('time_elapsed', int(time.time() - start_time))
+                    if len(episode_successes) > 0:
+                        logger.logkv("success rate", np.mean(episode_successes[-100:]))
                     if len(infos_values) > 0:
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.logkv(name, val)
@@ -489,19 +530,14 @@ class SAC(OffPolicyRLModel):
             
             return (self, learning_results)
 
-    def action_probability(self, observation, state=None, mask=None, actions=None):
-        if actions is None:
-            warnings.warn("Even thought SAC has a Gaussian policy, it cannot return a distribution as it "
-                          "is squashed by an tanh before being scaled and ouputed. Therefore 'action_probability' "
-                          "will only work with the 'actions' keyword argument being used. Returning None.")
-            return None
+    def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
+        if actions is not None:
+            raise ValueError("Error: SAC does not have action probabilities.")
 
-        observation = np.array(observation)
+        warnings.warn("Even though SAC has a Gaussian policy, it cannot return a distribution as it "
+                      "is squashed by a tanh before being scaled and ouputed.")
 
-        warnings.warn("The probabilty of taken a given action is exactly zero for a continuous distribution."
-                      "See http://blog.christianperone.com/2019/01/ for a good explanation")
-
-        return np.zeros((observation.shape[0], 1), dtype=np.float32)
+        return None
 
     def predict(self, observation, state=None, mask=None, deterministic=False):
         observation = np.array(observation)
@@ -517,7 +553,11 @@ class SAC(OffPolicyRLModel):
 
         return actions, None
 
-    def save(self, save_path):
+    def get_parameter_list(self):
+        return (self.params +
+                self.target_params)
+
+    def save(self, save_path, cloudpickle=False):
         data = {
             "learning_rate": self.learning_rate,
             "buffer_size": self.buffer_size,
@@ -537,33 +577,14 @@ class SAC(OffPolicyRLModel):
             "action_space": self.action_space,
             "policy": self.policy,
             "n_envs": self.n_envs,
+            "n_cpu_tf_sess": self.n_cpu_tf_sess,
+            "seed": self.seed,
+            "action_noise": self.action_noise,
+            "random_exploration": self.random_exploration,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
         }
 
-        params = self.sess.run(self.params)
-        target_params = self.sess.run(self.target_params)
+        params_to_save = self.get_parameters()
 
-        self._save_to_file(save_path, data=data, params=params + target_params)
-
-    @classmethod
-    def load(cls, load_path, env=None, **kwargs):
-        data, params = cls._load_from_file(load_path)
-
-        if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
-            raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
-                                                                              kwargs['policy_kwargs']))
-
-        model = cls(policy=data["policy"], env=env, _init_setup_model=False)
-        model.__dict__.update(data)
-        model.__dict__.update(kwargs)
-        model.set_env(env)
-        model.setup_model()
-
-        restores = []
-        for param, loaded_p in zip(model.params + model.target_params, params):
-            restores.append(param.assign(loaded_p))
-        model.sess.run(restores)
-
-        return model
+        self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
