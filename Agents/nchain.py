@@ -6,19 +6,20 @@ logging.getLogger("tensorflow_hub").setLevel(logging.CRITICAL)
 
 import gym 
 import stable_baselines
-import pybullet as p
-import pybullet_data
+#import pybullet as p
+#import pybullet_data
 
 import numpy as np
 import pandas as pd
 
 from stable_baselines.sac.policies import MlpPolicy
+from stable_baselines.clac.policies import MlpPolicy as CLAC_MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
-from stable_baselines import SAC
+from stable_baselines import SAC, CLAC
 
 
 NUM_RESAMPLES = 10
-NUM_TRAINING_STEPS = 25000
+NUM_TRAINING_STEPS = 50000
 NUM_AGENTS = 10
 
 results  = pd.DataFrame()
@@ -35,11 +36,9 @@ for agent_step in range(NUM_AGENTS):
     resample_step = 0
 
     while(resample_step < NUM_RESAMPLES):
-        (model, learning_results) = model.learn(total_timesteps=NUM_TRAINING_STEPS, log_interval=50)
-        
-        print(learning_results)
+        (model, learning_results) = model.learn(total_timesteps=NUM_TRAINING_STEPS, log_interval=100)
 
-        learning_results.to_pickle("SAC_auto_" + str(agent_step))
+        learning_results.to_pickle("SAC_auto_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
 
         training_mean = np.mean(learning_results["Episode Reward"])
         env.env_method("resample") 
@@ -51,17 +50,27 @@ for agent_step in range(NUM_AGENTS):
     del model 
     del env
 
-if(testing):
-    model = SAC.load("nchain/agent")
-    env.env_method("resample") 
 
-    obs = env.reset()
-    while True:
-        action, _states = model.predict(obs)
-        obs, rewards, dones, info = env.step(action)
+for agent_step in range(NUM_AGENTS):
+    env = gym.make('ContinuousNChain-v0')
+    env = DummyVecEnv([lambda: env])
 
-        if(dones[0]):
-            print(rewards[0])
+    model = CLAC(CLAC_MlpPolicy, env, mut_inf_coef=0.5, verbose=1)
+    
+    resample_step = 0
 
-            env.env_method("resample") 
+    while(resample_step < NUM_RESAMPLES):
+        (model, learning_results) = model.learn(total_timesteps=NUM_TRAINING_STEPS, log_interval=100)
+
+        learning_results.to_pickle("CLAC_auto_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
+
+        training_mean = np.mean(learning_results["Episode Reward"])
+        env.env_method("resample") 
+
+        resample_step += 1
+    
+    agent_step += 1
+
+    del model 
+    del env
 
