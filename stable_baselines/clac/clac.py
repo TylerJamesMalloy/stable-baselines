@@ -10,7 +10,7 @@ import pandas as pd
 import math 
 from scipy.stats import norm
 
-from stable_baselines.a2c.utils import find_trainable_variables, total_episode_reward_logger
+from stable_baselines.a2c.utils import total_episode_reward_logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.deepq.replay_buffer import ReplayBuffer
@@ -77,7 +77,7 @@ class CLAC(OffPolicyRLModel):
                  learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, mut_inf_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False
+                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
                  beta_update_method="clac", marginal_aprox_method="batch", ma_params = None):
 
         super(CLAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
@@ -366,8 +366,8 @@ class CLAC(OffPolicyRLModel):
                     tf.summary.scalar('episode_reward', self.tf_logged_reward)
 
                 # Retrieve parameters that must be saved
-                self.params = find_trainable_variables("model")
-                self.target_params = find_trainable_variables("target/values_fn/vf")
+                self.params = get_vars("model")
+                self.target_params = get_vars("target/values_fn/vf")
 
                 # Initialize Variables and target network
                 with self.sess.as_default():
