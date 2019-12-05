@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import numpy as np
 import tensorflow as tf
@@ -542,7 +543,9 @@ class ACER(ActorCriticRLModel):
                         logger.record_tabular(name, float(val))
                     logger.dump_tabular()
 
-                if self.replay_ratio > 0 and buffer.has_atleast(self.replay_start):
+                if (self.replay_ratio > 0 and
+                    buffer is not None and
+                    buffer.has_atleast(self.replay_start)):
                     samples_number = np.random.poisson(self.replay_ratio)
                     for _ in range(samples_number):
                         # get obs, actions, rewards, mus, dones from buffer.
@@ -647,7 +650,7 @@ class _Runner(AbstractEnvRunner):
         """
         Run a step leaning of the model
 
-        :return: ([float], [float], [float], [float], [float], [bool], [float])
+        :return: ([float], [float], [int64], [float], [float], [bool], [float])
                  encoded observation, observations, actions, rewards, mus, dones, masks
         """
         enc_obs = [self.obs]
@@ -683,7 +686,7 @@ class _Runner(AbstractEnvRunner):
 
         enc_obs = np.asarray(enc_obs, dtype=self.obs_dtype).swapaxes(1, 0)
         mb_obs = np.asarray(mb_obs, dtype=self.obs_dtype).swapaxes(1, 0)
-        mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
+        mb_actions = np.asarray(mb_actions, dtype=np.int64).swapaxes(1, 0)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
         mb_mus = np.asarray(mb_mus, dtype=np.float32).swapaxes(1, 0)
         mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(1, 0)
