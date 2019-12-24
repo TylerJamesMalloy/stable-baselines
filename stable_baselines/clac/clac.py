@@ -74,7 +74,7 @@ class CLAC(OffPolicyRLModel):
     :param ma_param: (list) list of parameters used in the marginal approximation method 
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
-                 learning_starts=100, train_freq=1, batch_size=256,
+                 learning_rate_phi=2e-3, learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, mut_inf_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
@@ -99,10 +99,12 @@ class CLAC(OffPolicyRLModel):
         self.gamma = gamma
         
         # Options for MI approximation and related parameters 
-        self.learning_rate_phi = learning_rate
+        self.learning_rate_phi = learning_rate_phi
         self.beta_update_method = beta_update_method
         self.marginal_aprox_method = marginal_aprox_method
         self.ma_params = ma_params
+        self.multivariate_mean = None
+        self.multivariate_cov = None 
 
 
         self.value_fn = None
@@ -394,27 +396,18 @@ class CLAC(OffPolicyRLModel):
             # assert all values are percentages in: action_count
             logp_phi = np.log(action_count)
         else:
-            """
-            entropy = 0.5 * np.log((2 * np.pi * np.e) ** self.env.action_space.shape[0] * np.linalg.det(cov))
-            logp_phi = np.tile(entropy, (self.batch_size, ))
-            """
-
             EPS = 1e-6  # Avoid NaN (prevents division by zero or log of zero)
 
-            mu =  np.mean(batch_actions,axis=0)
-            cov = np.cov(batch_actions, rowvar=False) + (np.identity(self.env.action_space.shape[0]) * EPS)
+            #mu =  np.mean(batch_actions,axis=0)
+            #cov = np.cov(batch_actions, rowvar=False) + (np.identity(self.env.action_space.shape[0]) * EPS)
+
+            mu = self.multivariate_mean 
+            cov = self.multivariate_cov
 
             multivar = multivariate_normal(mu, cov)
             logp_phi = multivar.logpdf(batch_actions) # * -1 
             logp_phi = logp_phi.reshape(self.batch_size, )
             #print(np.mean(logp_phi))
-
-            """
-            std = np.std(batch_actions,axis=0)
-            log_std = np.log(std)
-            pi = mu + np.random.normal(size=self.env.action_space.shape[0]) * std
-            pre_sum = -0.5 * (((pi - mu) / (np.exp(log_std) + EPS)) ** 2 + 2 * log_std + np.log(2 * np.pi))
-            """
         
         #print("logp_phi mean", np.mean(logp_phi, axis=0))
 
@@ -457,68 +450,108 @@ class CLAC(OffPolicyRLModel):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def sample(self, num_samples=1000):
-        samples = []
-        for _ in range(num_samples):
-            means = []
-            for state in range(self.observation_space.n):
-                action = (self.predict(state)[0][0] - self.action_space.low) / (self.action_space.high - self.action_space.low)[0]
-                means.append(action[0])
+        samples = [[],[],[],[],[]]
+        for state in range(self.observation_space.n):
+            mean = []
 
-            samples.append(means)
+            for _ in range(num_samples):
+                action = (self.predict(state)[0][0] - self.action_space.low) / (self.action_space.high - self.action_space.low)[0]
+                mean.append(action[0])
+
+            samples[state].append(np.mean(mean))
+        
         return samples
 
-    def run(self, total_episodes, randomization=0):
-        episodes = 0
-        episode_num_steps = 0 
-        episode_reward = 0
-        obs = self.env.reset()
-        DataFrame  = pd.DataFrame()
-        
-        while (episodes < total_episodes):
-            done = False 
-            while not done:
-                action, _states = self.predict(obs)
-                obs, reward, done, _ = self.env.step(action)
-                episode_num_steps += 1
-                episode_reward += reward
-                #self.env.render()
+    def run(self, total_timesteps, callback=None, seed=None,
+              log_interval=4, tb_log_name="CLAC", reset_num_timesteps=True, randomization=0):
 
-                if(done):
-                    env_name = self.env.unwrapped.envs[0].spec.id
+        new_tb_log = self._init_num_timesteps(reset_num_timesteps)
+
+        with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
+                as writer:
+
+            start_time = time.time()
+            episode_rewards = [0.0]
+            learning_results = pd.DataFrame()
+            obs = self.env.reset()
+            self.episode_reward = np.zeros((1,))
+            ep_info_buf = deque(maxlen=100)
+            n_updates = 0
+            infos_values = []
+
+            reward_data = pd.DataFrame()
+
+            for step in range(total_timesteps):                
+                if(isinstance(self.env.action_space, Discrete)):
+                    actions = list(range(self.env.action_space.n))
+                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                    rescaled_action = np.random.choice(actions, 1, p = action)[0]
+                else:
+                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                    # Rescale from [-1, 1] to the correct bounds
+                    rescaled_action = action * np.abs(self.action_space.low)
+
+                new_obs, reward, done, info = self.env.step(rescaled_action)
+
+                act_mu, act_std = self.policy_tf.proba_step(obs[None])
+
+                # Store transition in the replay buffer.
+                #print("adding action to replay buffer: ", action)
+                self.replay_buffer.add(obs, action, reward, new_obs, float(done))
+                obs = new_obs
+
+                # Retrieve reward and episode length if using Monitor wrapper
+                # info = info[0]
+                maybe_ep_info = info.get('episode')
+                if maybe_ep_info is not None:
+                    ep_info_buf.extend([maybe_ep_info])
+
+                if writer is not None:
+                    # Write reward per episode to tensorboard
+                    ep_reward = np.array([reward]).reshape((1, -1))
+                    ep_done = np.array([done]).reshape((1, -1))
+                    self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
+                                                                      ep_done, writer, self.num_timesteps)
+
+                episode_rewards[-1] += reward
+                if done:
+                    if not isinstance(self.env, VecEnv):
+                        obs = self.env.reset()
+
+                        if(randomization == 1):
+                            try:
+                                for env in self.env.unwrapped.envs:
+                                    env.randomize()
+                            except:
+                                print("Trying to randomize an environment that is not set up for randomization, check environment file")
+                                assert(False)
+
+                        if(randomization == 2):
+                            try:
+                                for env in self.env.unwrapped.envs:
+                                    env.randomize_extreme()
+                            except:
+                                print("Trying to extremely randomize an environment that is not set up for randomization, check environment file") 
+                                assert(False)
+
+                    Model_String = "CLAC"
+                    if not self.auto_mut_inf_coef:
+                        Model_String = "CLAC " + str(self.mut_inf_coef)
                     
+                    env_name = self.env.unwrapped.envs[0].spec.id
+
                     mut_inf_coef = self.mut_inf_coef
                     if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
                         mut_inf_coef = "auto"
-                        # For testing different entropy targets
-                        mut_inf_coef = self.target_entropy
                     Model_String = "CLAC" + str(mut_inf_coef)
-                    d = {'Episode Reward': episode_reward, 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': episodes, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
-                    DataFrame = DataFrame.append(d, ignore_index = True)
+                    d = {'Episode Reward': episode_rewards[-1], 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                    learning_results = learning_results.append(d, ignore_index = True)
+                    
+                    self.tf_logged_reward = episode_rewards[-1]
 
-                    done = True 
-                    episodes += 1 
-
-                    self.tf_logged_reward = episode_reward
-
-                    episode_num_steps = 0
-                    episode_reward = 0
-                    if(randomization == 1):
-                        try:
-                            for env in self.env.unwrapped.envs:
-                                env.randomize()
-                        except:
-                            print("Trying to randomize an environment that is not set up for randomization, check environment file")
-                            assert(False)
-
-                    if(randomization == 2):
-                        try:
-                            for env in self.env.unwrapped.envs:
-                                env.randomize_extreme()
-                        except:
-                            print("Trying to extremely randomize an environment that is not set up for randomization, check environment file") 
-                            assert(False)
-        
-        return DataFrame
+                    episode_rewards.append(0.0)
+                    
+            return (self, learning_results)
 
     def learn(self, total_timesteps, callback=None, seed=None,
               log_interval=4, tb_log_name="CLAC", reset_num_timesteps=True, randomization=0):
@@ -528,7 +561,7 @@ class CLAC(OffPolicyRLModel):
         with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
                 as writer:
 
-            self._setup_learn(seed)
+            self._setup_learn()
 
             # Transform to callable if needed
             self.learning_rate = get_schedule_fn(self.learning_rate)
@@ -584,6 +617,20 @@ class CLAC(OffPolicyRLModel):
                 # rescaled_action = np.array(rescaled_action, ndmin=1)
 
                 new_obs, reward, done, info = self.env.step(rescaled_action)
+
+                act_mu, act_std = self.policy_tf.proba_step(obs[None])
+
+                if(self.multivariate_mean == None):
+                    self.multivariate_mean = act_mu
+                else:
+                    self.multivariate_mean = ((1 - self.learning_rate_phi) * self.multivariate_mean) + (self.learning_rate_phi * act_mu)
+                if(self.multivariate_cov == None):
+                    self.multivariate_cov = np.diag(act_std)
+                else:
+                    cov = (self.learning_rate_phi * np.diag(act_std) + (1 - self.learning_rate_phi) * self.multivariate_cov)
+                    mom_1 = self.learning_rate_phi * np.square(np.diag(act_mu)) + (1 - self.learning_rate_phi) * np.square(np.diag(self.multivariate_mean))
+                    mom_2 = np.square((self.learning_rate_phi * np.diag(act_mu)) + (1 - self.learning_rate_phi)*np.diag(self.multivariate_mean))
+                    self.multivariate_cov = cov + mom_1 - mom_2 
 
                 # Store transition in the replay buffer.
                 #print("adding action to replay buffer: ", action)
@@ -733,7 +780,11 @@ class CLAC(OffPolicyRLModel):
 
         return actions, None
 
-    def save(self, save_path):
+    def get_parameter_list(self):
+        return (self.params +
+                self.target_params)
+
+    def save(self, save_path, cloudpickle=False):
         data = {
             "learning_rate": self.learning_rate,
             "buffer_size": self.buffer_size,
@@ -755,10 +806,16 @@ class CLAC(OffPolicyRLModel):
             "policy_kwargs": self.policy_kwargs
         }
 
+        """ OLD METHOD 
         params = self.sess.run(self.params)
         target_params = self.sess.run(self.target_params)
 
         self._save_to_file(save_path, data=data, params=params + target_params)
+        """
+
+        params_to_save = self.get_parameters()
+
+        self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
 
     @classmethod
     def load(cls, load_path, env=None, **kwargs):

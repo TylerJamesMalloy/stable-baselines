@@ -530,6 +530,106 @@ class SAC(OffPolicyRLModel):
             
             return (self, learning_results)
 
+    """
+    def run(self, total_timesteps, callback=None, seed=None, randomization = 0, 
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True):
+    """
+
+    def run(self, total_timesteps, callback=None, randomization = 0,
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
+
+        new_tb_log = self._init_num_timesteps(reset_num_timesteps)
+
+        if replay_wrapper is not None:
+            self.replay_buffer = replay_wrapper(self.replay_buffer)
+
+        with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
+                as writer:
+
+            self._setup_learn()
+
+            # Transform to callable if needed
+            self.learning_rate = get_schedule_fn(self.learning_rate)
+            # Initial learning rate
+            current_lr = self.learning_rate(1)
+
+            start_time = time.time()
+            learning_results = pd.DataFrame()
+            episode_rewards = [0.0]
+            episode_successes = []
+            if self.action_noise is not None:
+                self.action_noise.reset()
+            obs = self.env.reset()
+            self.episode_reward = np.zeros((1,))
+            ep_info_buf = deque(maxlen=100)
+            n_updates = 0
+            infos_values = []
+
+            for step in range(total_timesteps):
+                #self.env.render()
+                if callback is not None:
+                    # Only stop training if return value is False, not when it is None. This is for backwards
+                    # compatibility with callbacks that have no return statement.
+                    if callback(locals(), globals()) is False:
+                        break
+
+                # Before training starts, randomly sample actions
+                # from a uniform distribution for better exploration.
+                # Afterwards, use the learned policy
+                # if random_exploration is set to 0 (normal setting)
+                if (self.num_timesteps < self.learning_starts
+                    or np.random.rand() < self.random_exploration):
+                    # No need to rescale when sampling random action
+                    rescaled_action = action = self.env.action_space.sample()
+                else:
+                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                    # Add noise to the action (improve exploration,
+                    # not needed in general)
+                    if self.action_noise is not None:
+                        action = np.clip(action + self.action_noise(), -1, 1)
+                    # Rescale from [-1, 1] to the correct bounds
+                    rescaled_action = action * np.abs(self.action_space.low)
+
+                assert action.shape == self.env.action_space.shape
+
+                new_obs, reward, done, info = self.env.step(rescaled_action)
+
+                episode_rewards[-1] += reward
+                if done:
+                    if self.action_noise is not None:
+                        self.action_noise.reset()
+                    if not isinstance(self.env, VecEnv):
+                        obs = self.env.reset()
+                    
+                    Model_String = "SAC"
+                    if not self.auto_ent_coef:
+                        Model_String = "SAC " + str(self.ent_coef)
+                    
+                    env_name = self.env.unwrapped.envs[0].spec.id
+
+                    ent_coef = self.ent_coef
+                    if(type(self.ent_coef) == tf.Tensor or np.isnan(ent_coef)):
+                        ent_coef = "auto"
+                    Model_String = "SAC" + str(ent_coef)
+                    d = {'Episode Reward': episode_rewards[-1], 'ent_coef': ent_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                    learning_results = learning_results.append(d, ignore_index = True)
+
+                    episode_rewards.append(0.0)
+
+                    maybe_is_success = info.get('is_success')
+                    if maybe_is_success is not None:
+                        episode_successes.append(float(maybe_is_success))
+
+                if len(episode_rewards[-101:-1]) == 0:
+                    mean_reward = -np.inf
+                else:
+                    mean_reward = round(float(np.mean(episode_rewards[-101:-1])), 1)
+
+                num_episodes = len(episode_rewards)
+                self.num_timesteps += 1
+            
+            return (self, learning_results)
+
     def action_probability(self, observation, state=None, mask=None, actions=None, logp=False):
         if actions is not None:
             raise ValueError("Error: SAC does not have action probabilities.")
