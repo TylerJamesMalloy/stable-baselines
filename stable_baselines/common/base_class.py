@@ -239,9 +239,9 @@ class BaseRLModel(ABC):
         """
         Return the placeholders needed for the pretraining:
         - obs_ph: observation placeholder
-        - actions_ph will be population with an action from the environement
+        - actions_ph will be population with an action from the environment
             (from the expert dataset)
-        - deterministic_actions_ph: e.g., in the case of a gaussian policy,
+        - deterministic_actions_ph: e.g., in the case of a Gaussian policy,
             the mean.
 
         :return: ((tf.placeholder)) (obs_ph, actions_ph, deterministic_actions_ph)
@@ -477,7 +477,7 @@ class BaseRLModel(ABC):
         Load the model from file
 
         :param load_path: (str or file-like) the saved parameter location
-        :param env: (Gym Envrionment) the new environment to run the loaded model on
+        :param env: (Gym Environment) the new environment to run the loaded model on
             (can be None if you only need prediction from a trained model)
         :param custom_objects: (dict) Dictionary of objects to replace
             upon loading. If a variable is present in this dictionary as a
@@ -877,7 +877,7 @@ class ActorCriticRLModel(BaseRLModel):
         Load the model from file
 
         :param load_path: (str or file-like) the saved parameter location
-        :param env: (Gym Envrionment) the new environment to run the loaded model on
+        :param env: (Gym Environment) the new environment to run the loaded model on
             (can be None if you only need prediction from a trained model)
         :param custom_objects: (dict) Dictionary of objects to replace
             upon loading. If a variable is present in this dictionary as a
@@ -960,7 +960,7 @@ class OffPolicyRLModel(BaseRLModel):
         Load the model from file
 
         :param load_path: (str or file-like) the saved parameter location
-        :param env: (Gym Envrionment) the new environment to run the loaded model on
+        :param env: (Gym Environment) the new environment to run the loaded model on
             (can be None if you only need prediction from a trained model)
         :param custom_objects: (dict) Dictionary of objects to replace
             upon loading. If a variable is present in this dictionary as a
