@@ -1,4 +1,4 @@
-import os, logging, time
+import os, logging, time, multiprocessing 
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logging.getLogger("tensorflow").setLevel(logging.CRITICAL)
@@ -18,119 +18,161 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import SAC, CLAC
 
 
-NUM_RESAMPLES = 1
-NUM_TRAINING_STEPS = 500000
-NUM_GEN_STEPS = 5000
-NUM_GENERALIZATON_EPISODES = 20
-NUM_AGENTS = 10
+NUM_RESAMPLES = 25
+NUM_TRAINING_STEPS = 5000
+NUM_AGENTS = 5 
 
 results  = pd.DataFrame()
 
 training = True 
 testing = False 
 
-"""
-Testing Block for N-Chain generalization:
-"""
+nchain_folder = "nchain_1K"
 
-for agent_step in range(NUM_AGENTS):
-    clac_env = gym.make('ContinuousNChain-v0')
-    clac_env = DummyVecEnv([lambda: clac_env])
 
-    #model = SAC(MlpPolicy, env, verbose=1)
-    clac_model = CLAC(CLAC_MlpPolicy, clac_env, mut_inf_coef=0.3, verbose=1)
+def test_coef(coef):
+    for agent_step in range(NUM_AGENTS):
+        clac_env = gym.make('ContinuousNChain-v0')
+        clac_env = DummyVecEnv([lambda: clac_env])
 
-    sac_env = gym.make('ContinuousNChain-v0')
-    sac_env = DummyVecEnv([lambda: sac_env])
+        #model = SAC(MlpPolicy, env, verbose=1)
+        clac_model = CLAC(CLAC_MlpPolicy, clac_env, mut_inf_coef=coef, verbose=0)
 
-    #model = SAC(MlpPolicy, env, verbose=1)
-    sac_model = SAC(MlpPolicy, sac_env, ent_coef=0.3, verbose=1)
-    
-    resample_step = 0
+        sac_env = gym.make('ContinuousNChain-v0')
+        sac_env = DummyVecEnv([lambda: sac_env])
 
-    # Set both environments to the same hidden values 
-
-    sac_env.env_method("resample") 
-    hiddenValues = sac_env.env_method("getHiddenValues")[0]
-    
-    sac_env.env_method("setHiddenValues", hiddenValues)
-    clac_env.env_method("setHiddenValues", hiddenValues)
-
-    #print("step", agent_step, " ", hiddenValues)
-
-    # Train for some number of resampling steps: 
-
-    while(resample_step < NUM_RESAMPLES):
-        (clac_model, learning_results) = clac_model.learn(total_timesteps=NUM_TRAINING_STEPS, log_interval=10000)
-
-        learning_results.to_pickle("nchain/results/CLAC_0p3_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
-        clac_model.save("nchain/models/CLAC_0p3_" + str(agent_step) + "_" + str(resample_step))
-
-        print("clac mean full ", np.mean(learning_results["Episode Reward"]))
-        print("clac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-        print("clac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
-
-        (sac_model, learning_results) = sac_model.learn(total_timesteps=NUM_TRAINING_STEPS, log_interval=10000)
-
-        learning_results.to_pickle("nchain/results/SAC_0p3_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
-        sac_model.save("nchain/models/SAC_0p3_" + str(agent_step) + "_" + str(resample_step))
-
-        print("sac mean full ", np.mean(learning_results["Episode Reward"]))
-        print("sac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-        print("sac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
+        #model = SAC(MlpPolicy, env, verbose=1)
+        sac_model = SAC(MlpPolicy, sac_env, ent_coef=coef, verbose=0)
+        
+        resample_step = 0
 
         # Set both environments to the same hidden values 
 
         sac_env.env_method("resample") 
         hiddenValues = sac_env.env_method("getHiddenValues")[0]
+
+        print("coef: ", coef, "agent_step: ", agent_step, hiddenValues, "\n")
         
         sac_env.env_method("setHiddenValues", hiddenValues)
         clac_env.env_method("setHiddenValues", hiddenValues)
 
-        #print("step", resample_step, " ", hiddenValues)
+        # Train for some number of resampling steps: 
 
-        resample_step += 1
+        while(resample_step < NUM_RESAMPLES):
+            (clac_model, learning_results) = clac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
 
-    # Test performance on randomized environments:
+            learning_results.to_pickle(nchain_folder + "/results/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
+            clac_model.save(nchain_folder + "/models/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
 
-    clac_generalization_means = []
-    sac_generalization_means = []
+            #print("clac mean full ", np.mean(learning_results["Episode Reward"]))
+            #print("clac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
+            #print("clac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
 
-    generalization_results = pd.DataFrame()
+            (sac_model, learning_results) = sac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
 
-    generalization_step = 0 
-    while(generalization_step < NUM_GENERALIZATON_EPISODES):
-        sac_env.env_method("resample")
-        clac_env.env_method("resample")
+            learning_results.to_pickle(nchain_folder + "/results/SAC_"+ str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
+            sac_model.save(nchain_folder + "/models/SAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
 
-        (clac_model, clac_learning_results) = clac_model.run(total_timesteps=NUM_GEN_STEPS)
-        (sac_model, sac_learning_results) = sac_model.run(total_timesteps=NUM_GEN_STEPS)
+            #print("sac mean full ", np.mean(learning_results["Episode Reward"]))
+            #print("sac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
+            #print("sac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
 
-        generalization_results = generalization_results.append(clac_learning_results)
-        generalization_results = generalization_results.append(sac_learning_results)
+            # Set both environments to the same hidden values 
 
-        print("clac generaliation results ", np.mean(clac_learning_results["Episode Reward"]))
-        print("sac generaliation results ", np.mean(sac_learning_results["Episode Reward"]))
+            sac_env.env_method("resample") 
+            hiddenValues = sac_env.env_method("getHiddenValues")[0]
+            
+            sac_env.env_method("setHiddenValues", hiddenValues)
+            clac_env.env_method("setHiddenValues", hiddenValues)
 
-        clac_generalization_means.append(np.mean(clac_learning_results["Episode Reward"]))
-        sac_generalization_means.append(np.mean(sac_learning_results["Episode Reward"]))
+            #print("step", resample_step, " ", hiddenValues)
+
+            resample_step += 1
+
+        # Test performance on randomized environments:
+
+        clac_generalization_means = []
+        sac_generalization_means = []
         
+        agent_step += 1
+coefs = [0.025, 0.05, 0.075, 0.01]
 
-        generalization_step += 1 
+def test_agent(agent_step):
+    coefs = [0.04]
     
-    generalization_results.to_pickle("nchain/results/Generalization_Results_" + str(agent_step) + "a_" + "_0p3.pkl")
+    for coef in coefs:
+        clac_env = gym.make('ContinuousNChain-v0')
+        clac_env = DummyVecEnv([lambda: clac_env])
 
-    print(generalization_results)
+        #model = SAC(MlpPolicy, env, verbose=1)
+        clac_model = CLAC(CLAC_MlpPolicy, clac_env, mut_inf_coef=coef, verbose=0)
 
-    print("clac generaliation results TOTAL", np.mean(clac_generalization_means))
-    print("sac generaliation results TOTAL", np.mean(sac_generalization_means))
+        sac_env = gym.make('ContinuousNChain-v0')
+        sac_env = DummyVecEnv([lambda: sac_env])
 
-    #print("sac hidden values: ", sac_env.env_method("getHiddenValues"))
-    #print("clac hidden values: ", clac_env.env_method("getHiddenValues"))
-    
-    agent_step += 1
+        #model = SAC(MlpPolicy, env, verbose=1)
+        sac_model = SAC(MlpPolicy, sac_env, ent_coef=coef, verbose=0)
+        
+        resample_step = 0
+
+        # Set both environments to the same hidden values 
+
+        sac_env.env_method("resample") 
+        hiddenValues = sac_env.env_method("getHiddenValues")[0]
+
+        print("coef: ", coef, "agent_step: ", agent_step, hiddenValues, "\n")
+        
+        sac_env.env_method("setHiddenValues", hiddenValues)
+        clac_env.env_method("setHiddenValues", hiddenValues)
+
+        # Train for some number of resampling steps: 
+
+        while(resample_step < NUM_RESAMPLES):
+            (clac_model, learning_results) = clac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
+
+            learning_results["Resample"] = str(resample_step)
+
+            learning_results.to_pickle(nchain_folder + "/results/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
+            clac_model.save(nchain_folder +  "/models/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
+
+            #print("clac mean full ", np.mean(learning_results["Episode Reward"]))
+            #print("clac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
+            #print("clac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
+
+            (sac_model, learning_results) = sac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
+
+            learning_results["Resample"] = str(resample_step)
+
+            learning_results.to_pickle(nchain_folder +  "/results/SAC_"+ str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
+            sac_model.save(nchain_folder + "/models/SAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
+
+            #print("sac mean full ", np.mean(learning_results["Episode Reward"]))
+            #print("sac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
+            #print("sac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
+
+            # Set both environments to the same hidden values 
+
+            sac_env.env_method("resample") 
+            hiddenValues = sac_env.env_method("getHiddenValues")[0]
+            
+            sac_env.env_method("setHiddenValues", hiddenValues)
+            clac_env.env_method("setHiddenValues", hiddenValues)
+
+            #print("step", resample_step, " ", hiddenValues)
+
+            resample_step += 1
+
+        # Test performance on randomized environments:
+
+        clac_generalization_means = []
+        sac_generalization_means = []
+        
+agents = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 
+def mp_handler():
+    p = multiprocessing.Pool(len(agents))
+    p.map(test_agent, agents)
 
-
-
+if __name__ == '__main__':
+    mp_handler()

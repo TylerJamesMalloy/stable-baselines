@@ -20,7 +20,7 @@ keys/
 # Virtualenv
 /env
 
-/Agents/nchain 
+/Agents/nchain*
 
 *.sublime-project
 *.sublime-workspace

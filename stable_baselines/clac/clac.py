@@ -41,7 +41,7 @@ class CLAC(OffPolicyRLModel):
     (https://github.com/rail-berkeley/softlearning/) and from the Stable-Baseliens implementation 
     (https://github.com/hill-a/stable-baselines/tree/master/stable_baselines/sac)
 
-    Paper: In Preperation for ICLR 2020
+    Paper: In Preperation for ICML 2020
 
     :param policy: (CLACPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, LnMlpPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
@@ -465,93 +465,85 @@ class CLAC(OffPolicyRLModel):
     def run(self, total_timesteps, callback=None, seed=None,
               log_interval=4, tb_log_name="CLAC", reset_num_timesteps=True, randomization=0):
 
-        new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
-        with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, tb_log_name, new_tb_log) \
-                as writer:
+        start_time = time.time()
+        episode_rewards = [0.0]
+        learning_results = pd.DataFrame()
+        obs = self.env.reset()
+        self.episode_reward = np.zeros((1,))
+        ep_info_buf = deque(maxlen=100)
+        n_updates = 0
+        infos_values = []
 
-            start_time = time.time()
-            episode_rewards = [0.0]
-            learning_results = pd.DataFrame()
-            obs = self.env.reset()
-            self.episode_reward = np.zeros((1,))
-            ep_info_buf = deque(maxlen=100)
-            n_updates = 0
-            infos_values = []
+        reward_data = pd.DataFrame()
 
-            reward_data = pd.DataFrame()
+        for step in range(total_timesteps):                
+            if(isinstance(self.env.action_space, Discrete)):
+                actions = list(range(self.env.action_space.n))
+                action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                rescaled_action = np.random.choice(actions, 1, p = action)[0]
+            else:
+                action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                # Rescale from [-1, 1] to the correct bounds
+                rescaled_action = action * np.abs(self.action_space.low)
 
-            for step in range(total_timesteps):                
-                if(isinstance(self.env.action_space, Discrete)):
-                    actions = list(range(self.env.action_space.n))
-                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
-                    rescaled_action = np.random.choice(actions, 1, p = action)[0]
-                else:
-                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
-                    # Rescale from [-1, 1] to the correct bounds
-                    rescaled_action = action * np.abs(self.action_space.low)
+            new_obs, reward, done, info = self.env.step(rescaled_action)
 
-                new_obs, reward, done, info = self.env.step(rescaled_action)
+            act_mu, act_std = self.policy_tf.proba_step(obs[None])
+            obs = new_obs
 
-                act_mu, act_std = self.policy_tf.proba_step(obs[None])
+            # Retrieve reward and episode length if using Monitor wrapper
+            # info = info[0]
+            maybe_ep_info = info.get('episode')
+            if maybe_ep_info is not None:
+                ep_info_buf.extend([maybe_ep_info])
 
-                # Store transition in the replay buffer.
-                #print("adding action to replay buffer: ", action)
-                self.replay_buffer.add(obs, action, reward, new_obs, float(done))
-                obs = new_obs
+            if writer is not None:
+                # Write reward per episode to tensorboard
+                ep_reward = np.array([reward]).reshape((1, -1))
+                ep_done = np.array([done]).reshape((1, -1))
+                self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
+                                                                    ep_done, writer, self.num_timesteps)
 
-                # Retrieve reward and episode length if using Monitor wrapper
-                # info = info[0]
-                maybe_ep_info = info.get('episode')
-                if maybe_ep_info is not None:
-                    ep_info_buf.extend([maybe_ep_info])
+            episode_rewards[-1] += reward
+            if done:
+                if not isinstance(self.env, VecEnv):
+                    obs = self.env.reset()
 
-                if writer is not None:
-                    # Write reward per episode to tensorboard
-                    ep_reward = np.array([reward]).reshape((1, -1))
-                    ep_done = np.array([done]).reshape((1, -1))
-                    self.episode_reward = total_episode_reward_logger(self.episode_reward, ep_reward,
-                                                                      ep_done, writer, self.num_timesteps)
+                    if(randomization == 1):
+                        try:
+                            for env in self.env.unwrapped.envs:
+                                env.randomize()
+                        except:
+                            print("Trying to randomize an environment that is not set up for randomization, check environment file")
+                            assert(False)
 
-                episode_rewards[-1] += reward
-                if done:
-                    if not isinstance(self.env, VecEnv):
-                        obs = self.env.reset()
+                    if(randomization == 2):
+                        try:
+                            for env in self.env.unwrapped.envs:
+                                env.randomize_extreme()
+                        except:
+                            print("Trying to extremely randomize an environment that is not set up for randomization, check environment file") 
+                            assert(False)
 
-                        if(randomization == 1):
-                            try:
-                                for env in self.env.unwrapped.envs:
-                                    env.randomize()
-                            except:
-                                print("Trying to randomize an environment that is not set up for randomization, check environment file")
-                                assert(False)
+                Model_String = "CLAC"
+                if not self.auto_mut_inf_coef:
+                    Model_String = "CLAC " + str(self.mut_inf_coef)
+                
+                env_name = self.env.unwrapped.envs[0].spec.id
 
-                        if(randomization == 2):
-                            try:
-                                for env in self.env.unwrapped.envs:
-                                    env.randomize_extreme()
-                            except:
-                                print("Trying to extremely randomize an environment that is not set up for randomization, check environment file") 
-                                assert(False)
+                mut_inf_coef = self.mut_inf_coef
+                if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
+                    mut_inf_coef = "auto"
+                Model_String = "CLAC" + str(mut_inf_coef)
+                d = {'Episode Reward': episode_rewards[-1], 'Coefficient': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': "CLAC"}
+                learning_results = learning_results.append(d, ignore_index = True)
+                
+                self.tf_logged_reward = episode_rewards[-1]
 
-                    Model_String = "CLAC"
-                    if not self.auto_mut_inf_coef:
-                        Model_String = "CLAC " + str(self.mut_inf_coef)
-                    
-                    env_name = self.env.unwrapped.envs[0].spec.id
-
-                    mut_inf_coef = self.mut_inf_coef
-                    if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
-                        mut_inf_coef = "auto"
-                    Model_String = "CLAC" + str(mut_inf_coef)
-                    d = {'Episode Reward': episode_rewards[-1], 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
-                    learning_results = learning_results.append(d, ignore_index = True)
-                    
-                    self.tf_logged_reward = episode_rewards[-1]
-
-                    episode_rewards.append(0.0)
-                    
-            return (self, learning_results)
+                episode_rewards.append(0.0)
+                
+        return (self, learning_results)
 
     def learn(self, total_timesteps, callback=None, seed=None,
               log_interval=4, tb_log_name="CLAC", reset_num_timesteps=True, randomization=0):
@@ -705,7 +697,7 @@ class CLAC(OffPolicyRLModel):
                     if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
                         mut_inf_coef = "auto"
                     Model_String = "CLAC" + str(mut_inf_coef)
-                    d = {'Episode Reward': episode_rewards[-1], 'mut_inf_coef': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': Model_String}
+                    d = {'Episode Reward': episode_rewards[-1], 'Coefficient': mut_inf_coef, 'Timestep': self.num_timesteps, 'Episode Number': len(episode_rewards) - 1, 'Env': env_name, 'Randomization': randomization, 'Model': "CLAC"}
                     learning_results = learning_results.append(d, ignore_index = True)
                     
                     self.tf_logged_reward = episode_rewards[-1]
@@ -789,6 +781,8 @@ class CLAC(OffPolicyRLModel):
             "learning_rate": self.learning_rate,
             "buffer_size": self.buffer_size,
             "learning_starts": self.learning_starts,
+            "multivariate_mean": self.multivariate_mean,
+            "multivariate_cov": self.multivariate_cov,
             "train_freq": self.train_freq,
             "batch_size": self.batch_size,
             "tau": self.tau,
@@ -806,35 +800,6 @@ class CLAC(OffPolicyRLModel):
             "policy_kwargs": self.policy_kwargs
         }
 
-        """ OLD METHOD 
-        params = self.sess.run(self.params)
-        target_params = self.sess.run(self.target_params)
-
-        self._save_to_file(save_path, data=data, params=params + target_params)
-        """
-
         params_to_save = self.get_parameters()
 
         self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
-
-    @classmethod
-    def load(cls, load_path, env=None, **kwargs):
-        data, params = cls._load_from_file(load_path)
-
-        if 'policy_kwargs' in kwargs and kwargs['policy_kwargs'] != data['policy_kwargs']:
-            raise ValueError("The specified policy kwargs do not equal the stored policy kwargs. "
-                             "Stored kwargs: {}, specified kwargs: {}".format(data['policy_kwargs'],
-                                                                              kwargs['policy_kwargs']))
-
-        model = cls(policy=data["policy"], env=env, _init_setup_model=False)
-        model.__dict__.update(data)
-        model.__dict__.update(kwargs)
-        model.set_env(env)
-        model.setup_model()
-
-        restores = []
-        for param, loaded_p in zip(model.params + model.target_params, params):
-            restores.append(param.assign(loaded_p))
-        model.sess.run(restores)
-
-        return model
