@@ -18,17 +18,17 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import SAC, CLAC
 
 
-NUM_RESAMPLES = 25
-NUM_TRAINING_STEPS = 5000
-NUM_AGENTS = 5 
+NUM_RESAMPLES = 5
+NUM_TRAINING_STEPS = 50000
+NUM_AGENTS = 16
+COEFS = [0.06]
 
 results  = pd.DataFrame()
 
 training = True 
 testing = False 
 
-nchain_folder = "nchain_1K"
-
+nchain_folder = "nchain"
 
 def test_coef(coef):
     for agent_step in range(NUM_AGENTS):
@@ -64,18 +64,10 @@ def test_coef(coef):
             learning_results.to_pickle(nchain_folder + "/results/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
             clac_model.save(nchain_folder + "/models/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
 
-            #print("clac mean full ", np.mean(learning_results["Episode Reward"]))
-            #print("clac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-            #print("clac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
-
             (sac_model, learning_results) = sac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
 
             learning_results.to_pickle(nchain_folder + "/results/SAC_"+ str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
             sac_model.save(nchain_folder + "/models/SAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
-
-            #print("sac mean full ", np.mean(learning_results["Episode Reward"]))
-            #print("sac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-            #print("sac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
 
             # Set both environments to the same hidden values 
 
@@ -95,12 +87,9 @@ def test_coef(coef):
         sac_generalization_means = []
         
         agent_step += 1
-coefs = [0.025, 0.05, 0.075, 0.01]
 
-def test_agent(agent_step):
-    coefs = [0.04]
-    
-    for coef in coefs:
+def test_agent(agent_step):  
+    for coef in COEFS:
         clac_env = gym.make('ContinuousNChain-v0')
         clac_env = DummyVecEnv([lambda: clac_env])
 
@@ -135,20 +124,12 @@ def test_agent(agent_step):
             learning_results.to_pickle(nchain_folder + "/results/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
             clac_model.save(nchain_folder +  "/models/CLAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
 
-            #print("clac mean full ", np.mean(learning_results["Episode Reward"]))
-            #print("clac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-            #print("clac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
-
             (sac_model, learning_results) = sac_model.learn(total_timesteps=NUM_TRAINING_STEPS)
 
             learning_results["Resample"] = str(resample_step)
 
             learning_results.to_pickle(nchain_folder +  "/results/SAC_"+ str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step) + ".pkl")
             sac_model.save(nchain_folder + "/models/SAC_" + str(coef).replace(".", "p") + "_" + str(agent_step) + "_" + str(resample_step))
-
-            #print("sac mean full ", np.mean(learning_results["Episode Reward"]))
-            #print("sac mean first 100 ", np.mean(learning_results["Episode Reward"][0:100]))
-            #print("sac mean last 100 ", np.mean(learning_results["Episode Reward"][-100:]))
 
             # Set both environments to the same hidden values 
 
@@ -166,9 +147,8 @@ def test_agent(agent_step):
 
         clac_generalization_means = []
         sac_generalization_means = []
-        
-agents = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 
+agents = np.linspace(0, NUM_AGENTS - 1, NUM_AGENTS, dtype="int")
 
 def mp_handler():
     p = multiprocessing.Pool(len(agents))
