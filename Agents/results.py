@@ -68,11 +68,37 @@ for tag in tag_strings:
 
 print(All_Data)
 
-#sns.lineplot(x="Resample", y="Episode Reward", hue="Model", data=All_Data, ci="sd") 
+# df.loc[df['column_name'] == some_value]
+print(All_Data["Resample"].unique())
+Zero_Resample = All_Data.loc[All_Data["Resample"] == "0"]
+First_Resample = All_Data.loc[All_Data["Resample"] == "1"]
+Last_Resample = All_Data.loc[All_Data["Resample"] == "9"]
+
+Zero_Resample_CLAC = All_Data.loc[All_Data["Model"] == 'CLAC']
+Zero_Resample_CLAC = All_Data.loc[All_Data["Model"] == 'CLAC']
+
+Zero_Resample_SAC = All_Data.loc[All_Data["Model"] == 'SAC']
+Zero_Resample_SAC = All_Data.loc[All_Data["Model"] == 'SAC']
+
+print(Zero_Resample)
+
+g=sns.lineplot(x="Timestep", y="Episode Reward", hue="Model", data=Zero_Resample, ci="sd", alpha=0.1) 
+g.set(ylim=(-60, 0))
+
+plt.title('25K Time Step NChain Learning Results')
+plt.show()
+
+g=sns.lineplot(x="Timestep", y="Episode Reward", hue="Model", data=First_Resample, ci="sd", alpha=0.1) 
+g.set(ylim=(-60, 0))
+
+plt.title('25K Time Step NChain First Resample Results')
+plt.show()
+
+g=sns.lineplot(x="Timestep", y="Episode Reward", hue="Model", data=Last_Resample, ci="sd", alpha=0.1) 
+g.set(ylim=(-60, 0))
+plt.title('25K Time Step NChain Last Resample Results')
+plt.show()
 
 #ax = sns.boxplot(x="Resample", y="Episode Reward", hue="Model", data=All_Data, whis=100000)  # RUN PLOT   
-
-plt.title('250K Time Step NChain Resample Results')
-plt.show()
 
 All_Data = pd.DataFrame()
