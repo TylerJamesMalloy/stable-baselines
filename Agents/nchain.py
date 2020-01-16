@@ -89,6 +89,7 @@ def test_coef(coef):
         agent_step += 1
 
 def test_agent(agent_step):  
+    hiddenValuesDataFrame = pd.DataFrame()
     for coef in COEFS:
         clac_env = gym.make('ContinuousNChain-v0')
         clac_env = DummyVecEnv([lambda: clac_env])
@@ -109,7 +110,8 @@ def test_agent(agent_step):
         sac_env.env_method("resample") 
         hiddenValues = sac_env.env_method("getHiddenValues")[0]
 
-        print("coef: ", coef, "agent_step: ", agent_step, hiddenValues, "\n")
+        d = {'Coefficient': coef, 'Agent ID': agent_step, 'Resample': resample_step, 'Hidden Values': hiddenValues}
+        hiddenValuesDataFrame = hiddenValuesDataFrame.append(d, ignore_index = True)
         
         sac_env.env_method("setHiddenValues", hiddenValues)
         clac_env.env_method("setHiddenValues", hiddenValues)
@@ -143,10 +145,16 @@ def test_agent(agent_step):
 
             resample_step += 1
 
+            d = {'Coefficient': coef, 'Agent ID': agent_step, 'Resample': resample_step, 'Hidden Values': hiddenValues}
+            hiddenValuesDataFrame = hiddenValuesDataFrame.append(d, ignore_index = True)
+
         # Test performance on randomized environments:
 
         clac_generalization_means = []
         sac_generalization_means = []
+    
+    learning_results.to_pickle(nchain_folder + "/hiddenValues_" + agent_step + ".pkl")
+
 
 agents = np.linspace(0, NUM_AGENTS - 1, NUM_AGENTS, dtype="int")
 
