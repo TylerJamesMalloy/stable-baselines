@@ -631,13 +631,6 @@ class _Runner(AbstractEnvRunner):
                 self.batch_ob_shape = (n_env * (n_steps + 1), self.obs_dim)
             self.obs_dtype = np.float32
 
-        if isinstance(self.env.action_space, MultiDiscrete):
-            self.action_mask_shape = (n_env * (n_steps + 1), sum(self.env.action_space.nvec))
-        elif isinstance(self.env.action_space, Discrete):
-            self.action_mask_shape = (n_env * (n_steps + 1), self.env.action_space.n)
-        else:
-            self.action_mask_shape = (n_env * (n_steps + 1),)
-
         self.n_steps = n_steps
         self.states = model.initial_state
         self.dones = [False for _ in range(n_env)]
