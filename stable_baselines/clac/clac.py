@@ -66,19 +66,12 @@ class CLAC(OffPolicyRLModel):
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         Note: this has no effect on CLAC logging for now
-    :param beta_update_method: (str) string representation of the method for updating the beta value. Defaults
-        to "clac". Options: (clac, mirl)
-    :param marginal_aprox_method: (str) string representation of the method for approximating the marginal 
-        action distribution for use in estimating mutual infomration. Defaults to "batch". 
-        Options (batch, n-window, running, dnn). Note these may require other parameters. 
-    :param ma_param: (list) list of parameters used in the marginal approximation method 
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
                  learning_rate_phi=2e-3, learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, mut_inf_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
-                 beta_update_method="clac", marginal_aprox_method="batch", ma_params = None):
+                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
 
         super(CLAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                   policy_base=CLACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
@@ -100,9 +93,6 @@ class CLAC(OffPolicyRLModel):
         
         # Options for MI approximation and related parameters 
         self.learning_rate_phi = learning_rate_phi
-        self.beta_update_method = beta_update_method
-        self.marginal_aprox_method = marginal_aprox_method
-        self.ma_params = ma_params
         self.multivariate_mean = None
         self.multivariate_cov = None 
 
@@ -231,7 +221,7 @@ class CLAC(OffPolicyRLModel):
                     # of https://arxiv.org/abs/1812.05905
                     if isinstance(self.mut_inf_coef, str) and self.mut_inf_coef.startswith('auto'):
                         # Default initial value of mut_inf_coef when learned
-                        init_value = 1.0 # Should this be negative?
+                        init_value = 1.0 
                         if '_' in self.mut_inf_coef:
                             init_value = float(self.mut_inf_coef.split('_')[1])
                             assert init_value > 0., "The initial value of mut_inf_coef must be greater than 0"
@@ -390,6 +380,7 @@ class CLAC(OffPolicyRLModel):
         
         # Determine the logp_phi based on the current batch:
         if(isinstance(self.env.action_space, Discrete)):
+            assert(False) # Not implemented
             # not correct for discrete actions
             action_count = [np.count_nonzero(batch_actions == action) for action in batch_actions]
             action_count = action_count / len(batch_actions)
@@ -403,6 +394,9 @@ class CLAC(OffPolicyRLModel):
 
             mu = self.multivariate_mean 
             cov = self.multivariate_cov
+
+            if(len(mu) == 1):
+                mu = mu[0]
 
             multivar = multivariate_normal(mu, cov)
             logp_phi = multivar.logpdf(batch_actions) # * -1 
@@ -578,6 +572,9 @@ class CLAC(OffPolicyRLModel):
                     if callback(locals(), globals()) is False:
                         break
 
+
+                
+
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
                 # Afterwards, use the learned policy.
@@ -612,17 +609,25 @@ class CLAC(OffPolicyRLModel):
 
                 act_mu, act_std = self.policy_tf.proba_step(obs[None])
 
-                if(self.multivariate_mean == None):
-                    self.multivariate_mean = act_mu
-                else:
-                    self.multivariate_mean = ((1 - self.learning_rate_phi) * self.multivariate_mean) + (self.learning_rate_phi * act_mu)
-                if(self.multivariate_cov == None):
-                    self.multivariate_cov = np.diag(act_std)
-                else:
-                    cov = (self.learning_rate_phi * np.diag(act_std) + (1 - self.learning_rate_phi) * self.multivariate_cov)
-                    mom_1 = self.learning_rate_phi * np.square(np.diag(act_mu)) + (1 - self.learning_rate_phi) * np.square(np.diag(self.multivariate_mean))
-                    mom_2 = np.square((self.learning_rate_phi * np.diag(act_mu)) + (1 - self.learning_rate_phi)*np.diag(self.multivariate_mean))
-                    self.multivariate_cov = cov + mom_1 - mom_2 
+                if(len(act_std) == 1):
+                    act_std = act_std[0]
+
+                #print("ACT MU FROM PROBA STEP", act_mu)
+                #print("ACT STD FROM PROBA STEP", act_std)
+                if self.num_timesteps > self.learning_starts:
+                    # Only update marginal approximation after learning starts is completed
+                    if(self.multivariate_mean is None):
+                        self.multivariate_mean = act_mu
+                    else:
+                        previous_mean = self.multivariate_mean
+                        self.multivariate_mean = ((1 - self.learning_rate_phi) * self.multivariate_mean) + (self.learning_rate_phi * act_mu)
+                    if(self.multivariate_cov is None):
+                        self.multivariate_cov = np.diag(act_std)
+                    else:
+                        cov = (self.learning_rate_phi * np.diag(act_std) + (1 - self.learning_rate_phi) * self.multivariate_cov)
+                        mom_1 = (self.learning_rate_phi * np.square(np.diag(act_mu))) + ((1 - self.learning_rate_phi) * np.square(np.diag(previous_mean)))
+                        mom_2 = np.square((self.learning_rate_phi * np.diag(act_mu)) + (1 - self.learning_rate_phi)*np.diag(previous_mean))
+                        self.multivariate_cov = cov + mom_1 - mom_2 
 
                 # Store transition in the replay buffer.
                 #print("adding action to replay buffer: ", action)

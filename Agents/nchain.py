@@ -4,6 +4,9 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logging.getLogger("tensorflow").setLevel(logging.CRITICAL)
 logging.getLogger("tensorflow_hub").setLevel(logging.CRITICAL)
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import gym 
 import stable_baselines
 #import pybullet as p
@@ -18,17 +21,20 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import SAC, CLAC
 
 
-NUM_RESAMPLES = 5
+NUM_RESAMPLES = 20
 NUM_TRAINING_STEPS = 50000
 NUM_AGENTS = 16
 COEFS = [0.06]
+
+agents = np.linspace(17, 32, NUM_AGENTS, dtype="int")
+print(agents)
 
 results  = pd.DataFrame()
 
 training = True 
 testing = False 
 
-nchain_folder = "nchain"
+nchain_folder = "nchain_1M"
 
 def test_coef(coef):
     for agent_step in range(NUM_AGENTS):
@@ -153,14 +159,14 @@ def test_agent(agent_step):
         clac_generalization_means = []
         sac_generalization_means = []
     
-    learning_results.to_pickle(nchain_folder + "/hiddenValues_" + agent_step + ".pkl")
-
-
-agents = np.linspace(0, NUM_AGENTS - 1, NUM_AGENTS, dtype="int")
+    hiddenValuesDataFrame.to_pickle(nchain_folder + "/hiddenValues_" + str(agent_step) + ".pkl")
 
 def mp_handler():
     p = multiprocessing.Pool(len(agents))
     p.map(test_agent, agents)
+
+    #p = multiprocessing.Pool(len(COEFS))
+    #p.map(test_coef, COEFS)
 
 if __name__ == '__main__':
     mp_handler()
