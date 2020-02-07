@@ -1,6 +1,6 @@
 # Capacity-Limited Actor-Critic Repository 
 
-This is a fork of the Stable Baselines repository with the added Capacity-Limited Actor-Critic model for inclusion with a submission to the International Conference on Learning Representation 2020. Relevant files for this work can be found at [this path](https://github.com/TylerJamesMalloy/stable-baselines/tree/master/stable_baselines/clac). There is an individual readme file for the CLAC model that can be found by following the previous path. 
+This is a fork of the Stable Baselines repository with the added Capacity-Limited Actor-Critic model for inclusion with a submission to the International Conference on Learning Representation 2020. Relevant files for this work can be found at stable-baselines/clac
 
 
 # Original Stable Baselines Readme
