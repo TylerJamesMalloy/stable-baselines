@@ -92,10 +92,9 @@ class CLAC(OffPolicyRLModel):
         self.gamma = gamma
         
         # Options for MI approximation and related parameters 
-        self.learning_rate_phi = learning_rate_phi
+        self.learning_rate_phi = learning_rate_phi # Taken from MIRL paper, not altered 
         self.multivariate_mean = None
         self.multivariate_cov = None 
-
 
         self.value_fn = None
         self.graph = None
@@ -176,7 +175,6 @@ class CLAC(OffPolicyRLModel):
                     self.terminals_ph = tf.placeholder(tf.float32, shape=(None, 1), name='terminals')
                     self.rewards_ph = tf.placeholder(tf.float32, shape=(None, 1), name='rewards')
                     
-                    # Tyler action space 
                     # If the action space is discrete we want 
                     if(isinstance(self.env.action_space, Discrete)):
                         self.action_history = np.zeros((self.env.action_space.n))
@@ -208,17 +206,13 @@ class CLAC(OffPolicyRLModel):
                     # Target entropy is used when learning the entropy coefficient
                     if self.target_entropy == 'auto':
                         # automatically set target entropy if needed
-                        #self.target_entropy = -np.prod(self.env.action_space.shape).astype(np.float32)
-                        # needs to be positive in CLAC, capacity limit is positive. 
                         self.target_entropy = np.prod(self.env.action_space.shape).astype(np.float32)
                     else:
                         # Force conversion
                         # this will also throw an error for unexpected string
                         self.target_entropy = float(self.target_entropy)
 
-                    # The entropy coefficient or entropy can be learned automatically
-                    # see Automating Entropy Adjustment for Maximum Entropy RL section
-                    # of https://arxiv.org/abs/1812.05905
+                    # Automatic mutual information coefficient setting is not fully tested
                     if isinstance(self.mut_inf_coef, str) and self.mut_inf_coef.startswith('auto'):
                         # Default initial value of mut_inf_coef when learned
                         init_value = 1.0 
@@ -293,15 +287,6 @@ class CLAC(OffPolicyRLModel):
                     # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
                     policy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
 
-                    # Calculate the marginal loss and minimize it: 
-                    #phi_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_phi)
-                    #marginal_loss = tf.reduce_mean(phi_proba - policy_out)
-                    #phi_train_op = phi_optimizer.minimize(marginal_loss, var_list=get_vars('model/phi'))
-
-                    #print(get_vars('model/pi'))
-                    #print(get_vars('model/phi'))
-
-                    # Tyler Discrete
                     if(isinstance(self.env.action_space, Discrete)):
                         policy_train_op = policy_optimizer.minimize(discrete_loss, var_list=get_vars('model/pi'))
                     else:
@@ -572,9 +557,6 @@ class CLAC(OffPolicyRLModel):
                     if callback(locals(), globals()) is False:
                         break
 
-
-                
-
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
                 # Afterwards, use the learned policy.
@@ -598,7 +580,6 @@ class CLAC(OffPolicyRLModel):
                         # Rescale from [-1, 1] to the correct bounds
                         rescaled_action = action * np.abs(self.action_space.low)
 
-                # added Tyler 
                 if(not isinstance(self.env.action_space, Discrete)):
                     assert action.shape == self.env.action_space.shape
 
@@ -746,8 +727,7 @@ class CLAC(OffPolicyRLModel):
 
         observation = np.array(observation)
 
-        warnings.warn("The probabilty of taken a given action is exactly zero for a continuous distribution."
-                      "See http://blog.christianperone.com/2019/01/ for a good explanation")
+        warnings.warn("The probabilty of taken a given action is exactly zero for a continuous distribution.")
 
         return np.zeros((observation.shape[0], 1), dtype=np.float32)
 
@@ -755,8 +735,7 @@ class CLAC(OffPolicyRLModel):
         observation = np.array(observation)
         vectorized_env = self._is_vectorized_observation(observation, self.observation_space)
         observation = observation.reshape((-1,) + self.observation_space.shape)
-        
-        # Tyler Discrete
+
         if(isinstance(self.env.action_space, Discrete)):
             # could replace this with map apply 
             actions = []
