@@ -9,7 +9,7 @@ CLAC
 `Capacity-Limited Reinforcement Learning: Applications in Deep Actor-Critic Methods for Continuous Control.
 
 CLAC is an Deep Off-Policy Actor-Critic implementation of Capacity-Limited Reinforcement Learning, here presented as supplementary code alongside 
-a paper submission to ICLR 2020. 
+a paper submission to ICML 2020. 
 
 
   The CLAC model does not support ``stable_baselines.common.policies`` because it uses double q-values
