@@ -17,6 +17,9 @@ _build/
 /build
 keys/
 
+.gitignore 
+#Agents/* 
+
 # Virtualenv
 /venv/*
 
