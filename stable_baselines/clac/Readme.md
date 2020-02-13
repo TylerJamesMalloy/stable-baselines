@@ -1,7 +1,7 @@
 # Capacity-Limited Actor-Critic Repository 
 
 These files include the code for the Capacity-Limited Actor-Critic model using the Stable Baseline repository as a template for the code. 
-Specifically this code is based promarily on the Soft Actor-Critic model. 
+Specifically this code is based primarally on the Soft Actor-Critic model. 
 
 CLAC
 ===
@@ -23,10 +23,10 @@ a paper submission to ICLR 2020.
 Notes
 -----
 
-- Original paper: In Preperation for ICLR
+- Original paper: In Preperation for ICML
 
     The default policies for CLAC differ a bit from others MlpPolicy: it uses ReLU instead of tanh activation,
-    to match the original paper
+    to match the original SAC paper
 
 
 Can I use?
