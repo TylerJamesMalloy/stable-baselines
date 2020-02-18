@@ -1,7 +1,6 @@
 # Capacity-Limited Actor-Critic Repository 
 
-These files include the code for the Capacity-Limited Actor-Critic model using the Stable Baseline repository as a template for the code. 
-Specifically this code is based primarally on the Soft Actor-Critic model. 
+These files include the code for the Capacity-Limited Actor-Critic model using the Stable Baseline repository as a template for the code. Specifically this code is based primarally on the Soft Actor-Critic model. 
 
 CLAC
 ===
@@ -60,11 +59,11 @@ Example
 
   model = CLAC(MlpPolicy, env, verbose=1)
   model.learn(total_timesteps=50000, log_interval=10)
-  model.save("sac_pendulum")
+  model.save("clac_pendulum")
 
   del model # remove to demonstrate saving and loading
 
-  model = SAC.load("sac_pendulum")
+  model = CLAC.load("sac_pendulum")
 
   obs = env.reset()
   while True:
