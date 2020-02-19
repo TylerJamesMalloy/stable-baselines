@@ -170,7 +170,7 @@ class FeedForwardPolicy(SACPolicy):
     :param n_steps: (int) The number of steps to run for each environment
     :param n_batch: (int) The number of batch to run (n_envs * n_steps)
     :param reuse: (bool) If the policy is reusable or not
-    :param layers: ([int]) The size of the Neural network for the policy (if None, default to [64, 64])
+    :param layers: ([int]) The size of the Neural network for the policy (if None, default to [256, 256])
     :param cnn_extractor: (function (TensorFlow Tensor, ``**kwargs``): (TensorFlow Tensor)) the CNN feature extraction
     :param feature_extraction: (str) The feature extraction type ("cnn" or "mlp")
     :param layer_norm: (bool) enable layer normalisation
@@ -192,7 +192,7 @@ class FeedForwardPolicy(SACPolicy):
         self.cnn_extractor = cnn_extractor
         self.reuse = reuse
         if layers is None:
-            layers = [64, 64]
+            layers = [256, 256]
         self.layers = layers
         self.reg_loss = None
         self.reg_weight = reg_weight
@@ -328,7 +328,7 @@ class LnCnnPolicy(FeedForwardPolicy):
 
 class MlpPolicy(FeedForwardPolicy):
     """
-    Policy object that implements actor critic, using a MLP (2 layers of 64)
+    Policy object that implements actor critic, using a MLP (2 layers of 256)
 
     :param sess: (TensorFlow session) The current TensorFlow session
     :param ob_space: (Gym Space) The observation space of the environment
@@ -347,7 +347,7 @@ class MlpPolicy(FeedForwardPolicy):
 
 class LnMlpPolicy(FeedForwardPolicy):
     """
-    Policy object that implements actor critic, using a MLP (2 layers of 64), with layer normalisation
+    Policy object that implements actor critic, using a MLP (2 layers of 256), with layer normalisation
 
     :param sess: (TensorFlow session) The current TensorFlow session
     :param ob_space: (Gym Space) The observation space of the environment

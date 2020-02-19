@@ -71,8 +71,8 @@ class SAC(OffPolicyRLModel):
         If None, the number of cpu of the current machine will be used.
     """
 
-    def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
-                 learning_starts=100, train_freq=1, batch_size=64,
+    def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=1000000,
+                 learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, verbose=0, tensorboard_log=None,
@@ -652,10 +652,7 @@ class SAC(OffPolicyRLModel):
             "tau": self.tau,
             "ent_coef": self.ent_coef if isinstance(self.ent_coef, float) else 'auto',
             "target_entropy": self.target_entropy,
-            # Should we also store the replay buffer?
-            # this may lead to high memory usage
-            # with all transition inside
-            # "replay_buffer": self.replay_buffer
+            #"replay_buffer": self.replay_buffer
             "gamma": self.gamma,
             "verbose": self.verbose,
             "observation_space": self.observation_space,

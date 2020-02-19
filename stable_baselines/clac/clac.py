@@ -66,15 +66,22 @@ class CLAC(OffPolicyRLModel):
     :param policy_kwargs: (dict) additional arguments to be passed to the policy on creation
     :param full_tensorboard_log: (bool) enable additional logging when using tensorboard
         Note: this has no effect on CLAC logging for now
+    :param seed: (int) Seed for the pseudo-random generators (python, numpy, tensorflow).
+        If None (default), use random seed. Note that if you want completely deterministic
+        results, you must set `n_cpu_tf_sess` to 1.
+    :param n_cpu_tf_sess: (int) The number of threads for TensorFlow operations
+        If None, the number of cpu of the current machine will be used.
     """
-    def __init__(self, policy, env, gamma=0.99, learning_rate=1e-4, buffer_size=10000,
+    def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=1000000,
                  learning_rate_phi=2e-3, learning_starts=100, train_freq=1, batch_size=256,
                  tau=0.005, mut_inf_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
-                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False):
+                 _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
+                 seed=None, n_cpu_tf_sess=None):
 
         super(CLAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
-                                  policy_base=CLACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs)
+                                  policy_base=CLACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
+                                  seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.buffer_size = buffer_size
         self.learning_rate = learning_rate
@@ -151,10 +158,8 @@ class CLAC(OffPolicyRLModel):
         with SetVerbosity(self.verbose):
             self.graph = tf.Graph()
             with self.graph.as_default():
-                n_cpu = multiprocessing.cpu_count()
-                if sys.platform == 'darwin':
-                    n_cpu //= 2
-                self.sess = tf_util.make_session(num_cpu=n_cpu, graph=self.graph)
+                self.set_random_seed(self.seed)
+                self.sess = tf_util.make_session(num_cpu=self.n_cpu_tf_sess, graph=self.graph)
 
                 self.replay_buffer = ReplayBuffer(self.buffer_size)
 
@@ -773,13 +778,16 @@ class CLAC(OffPolicyRLModel):
             "mut_inf_coef": self.mut_inf_coef if isinstance(self.mut_inf_coef, float) else 'auto',
             "target_entropy": self.target_entropy,
             "num_timesteps": self.num_timesteps, 
-            "replay_buffer": self.replay_buffer,
+            #"replay_buffer": self.replay_buffer,
             "gamma": self.gamma,
             "verbose": self.verbose,
             "observation_space": self.observation_space,
             "action_space": self.action_space,
             "policy": self.policy,
             "n_envs": self.n_envs,
+            "n_cpu_tf_sess": self.n_cpu_tf_sess,
+            "seed": self.seed,
+            "random_exploration": self.random_exploration,
             "_vectorize_action": self._vectorize_action,
             "policy_kwargs": self.policy_kwargs
         }
