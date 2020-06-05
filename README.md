@@ -1,6 +1,8 @@
 # Capacity-Limited Actor-Critic Repository 
 
-This is a fork of the Stable Baselines repository with the added Capacity-Limited Actor-Critic model for inclusion with a submission to the ICML 2020. Relevant files for this work can be found at stable-baselines/clac
+This is a fork of the Stable Baselines repository with the added Capacity-Limited Actor-Critic model for inclusion with a submission to the NeurIPS 2020. Relevant files for this work can be found at stable-baselines/clac
+
+The results found in the paper can be run with the standard method of running stable-baselines models included in the following sections. The environments used are InvertedDoublePendulumBulletEnv-v0 and AntBulletEnv-v0 from the bullet environment package.
 
 No acknowledgements, maintainers, or members listed in the original stable baseline citation are related to the group that submitted the ICML paper, their names are left in as to maintain the complete original installation instructions and readme.
 
