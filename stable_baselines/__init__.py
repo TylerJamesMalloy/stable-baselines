@@ -1,4 +1,5 @@
 from stable_baselines.a2c import A2C
+from stable_baselines.cla2c import CLA2C
 from stable_baselines.acer import ACER
 from stable_baselines.acktr import ACKTR
 from stable_baselines.deepq import DQN

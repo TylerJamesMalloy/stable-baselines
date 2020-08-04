@@ -4,9 +4,11 @@ import gym
 import numpy as np
 import tensorflow as tf
 
+from scipy.stats import entropy
+
 from stable_baselines import logger
 from stable_baselines.common import explained_variance, tf_util, ActorCriticRLModel, SetVerbosity, TensorboardWriter
-from stable_baselines.common.policies import ActorCriticPolicy, RecurrentActorCriticPolicy
+from stable_baselines.cla2c.policies import ActorCriticPolicy, RecurrentActorCriticPolicy #, ActorCriticMarginal
 from stable_baselines.common.runners import AbstractEnvRunner
 from stable_baselines.common.schedules import Scheduler
 from stable_baselines.common.tf_util import mse, total_episode_reward_logger
@@ -30,9 +32,9 @@ def discount_with_dones(rewards, dones, gamma):
     return discounted[::-1]
 
 
-class A2C(ActorCriticRLModel):
+class CLA2C(ActorCriticRLModel):
     """
-    The A2C (Advantage Actor Critic) model class, https://arxiv.org/abs/1602.01783
+    The CLA2C (Advantage Actor Critic) model class, https://arxiv.org/abs/1602.01783
 
     :param policy: (ActorCriticPolicy or str) The policy model to use (MlpPolicy, CnnPolicy, CnnLstmPolicy, ...)
     :param env: (Gym environment or str) The environment to learn from (if registered in Gym, can be str)
@@ -40,7 +42,7 @@ class A2C(ActorCriticRLModel):
     :param n_steps: (int) The number of steps to run for each environment per update
         (i.e. batch size is n_steps * n_env where n_env is number of environment copies running in parallel)
     :param vf_coef: (float) Value function coefficient for the loss calculation
-    :param ent_coef: (float) Entropy coefficient for the loss calculation
+    :param mut_inf_coef: (float) Entropy coefficient for the loss calculation
     :param max_grad_norm: (float) The maximum value for the gradient clipping
     :param learning_rate: (float) The learning rate
     :param alpha: (float)  RMSProp decay parameter (default: 0.99)
@@ -62,19 +64,24 @@ class A2C(ActorCriticRLModel):
         If None, the number of cpu of the current machine will be used.
     """
 
-    def __init__(self, policy, env, gamma=0.99, n_steps=5, vf_coef=0.25, ent_coef=0.01, max_grad_norm=0.5,
-                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', verbose=0,
-                 tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None):
+    def __init__(self, policy, env, gamma=0.99, n_steps=5, vf_coef=0.25, mut_inf_coef=0.1, ent_coef=0.01, max_grad_norm=0.5,
+                 learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', mut_schedule='constant', verbose=0,
+                 tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, marginal_kwargs=None,
+                 full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None, marginal_type="window", marginal_reverse=False):
 
         self.n_steps = n_steps
         self.gamma = gamma
         self.vf_coef = vf_coef
-        self.ent_coef = ent_coef
+        self.mut_inf_coef = mut_inf_coef
+        self.init_mut_coef = mut_inf_coef
+        self.ent_coef=ent_coef + mut_inf_coef
+        self.init_ent_coef = ent_coef
         self.max_grad_norm = max_grad_norm
         self.alpha = alpha
         self.epsilon = epsilon
         self.lr_schedule = lr_schedule
+        self.mut_schedule = mut_schedule
+        self.marginal_reverse = marginal_reverse
         self.learning_rate = learning_rate
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
@@ -95,17 +102,39 @@ class A2C(ActorCriticRLModel):
         self.initial_state = None
         self.learning_rate_schedule = None
         self.summary = None
+        
+        self.marginal_type = marginal_type
 
-        super(A2C, self).__init__(policy=policy, env=env, verbose=verbose, requires_vec_env=True,
-                                  _init_setup_model=_init_setup_model, policy_kwargs=policy_kwargs,
-                                  seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
+        self.logp_phi = None
+        self.action_history = None
+        self.running_marginal = None 
+        self.masked_marginal_ph = None 
+
+        self.marginal_entropy = None
+        self.marginal_ph = None
+        self.marginal_loss = None
+
+        if(marginal_reverse == True):
+            self.mut_inf_coef = 0
+
+        super(CLA2C, self).__init__(policy=policy,  env=env, verbose=verbose,  # marginal=marginal, 
+                                    requires_vec_env=True,_init_setup_model=_init_setup_model, 
+                                    policy_kwargs=policy_kwargs, # marginal_kwargs=marginal_kwargs,
+                                    seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         # if we are loading, it is possible the environment is not known, however the obs and action space are known
         if _init_setup_model:
             self.setup_model()
+    
+    def reset_coef(self, mut_inf_coef):
+        if(mut_inf_coef == -1):
+            self.mut_inf_coef = self.init_mut_coef
 
+        self.mut_inf_coef = mut_inf_coef
+        self.ent_coef = self.init_ent_coef + mut_inf_coef
+        
     def _make_runner(self) -> AbstractEnvRunner:
-        return A2CRunner(self.env, self, n_steps=self.n_steps, gamma=self.gamma)
+        return CLA2CRunner(self.env, self, n_steps=self.n_steps, gamma=self.gamma)
 
     def _get_pretrain_placeholders(self):
         policy = self.train_model
@@ -116,8 +145,11 @@ class A2C(ActorCriticRLModel):
     def setup_model(self):
         with SetVerbosity(self.verbose):
 
-            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the A2C model must be an " \
-                                                                "instance of common.policies.ActorCriticPolicy."
+            assert issubclass(self.policy, ActorCriticPolicy), "Error: the input policy for the CLA2C model must be an " \
+                                                                "instance of common.cla2c.ActorCriticPolicy."
+            
+            if isinstance(self.env.action_space, gym.spaces.Discrete):
+                self.action_history = np.zeros(self.env.action_space.n)
 
             self.graph = tf.Graph()
             with self.graph.as_default():
@@ -139,7 +171,7 @@ class A2C(ActorCriticRLModel):
                                        custom_getter=tf_util.outer_scope_getter("train_model")):
                     train_model = self.policy(self.sess, self.observation_space, self.action_space, self.n_envs,
                                               self.n_steps, n_batch_train, reuse=True, **self.policy_kwargs)
-
+                
                 with tf.variable_scope("loss", reuse=False):
                     self.actions_ph = train_model.pdtype.sample_placeholder([None], name="action_ph")
                     self.advs_ph = tf.placeholder(tf.float32, [None], name="advs_ph")
@@ -153,14 +185,52 @@ class A2C(ActorCriticRLModel):
                     # https://arxiv.org/pdf/1708.04782.pdf#page=9, https://arxiv.org/pdf/1602.01783.pdf#page=4
                     # and https://github.com/dennybritz/reinforcement-learning/issues/34
                     # suggest to add an entropy component in order to improve exploration.
-                    loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
 
+                    self.marginal_ph = tf.placeholder(dtype=tf.float32, shape=(self.n_batch, None), name="marginal_ph")  # tf.placeholder(dtype="float32", shape=() , name="marginal_ph")                    
+                    self.marginal_loss = mse(self.marginal_ph, train_model.policy_proba)                                 #tf.reduce_mean(self.marginal_ph * neglogpac) #
+                    
+                    # Get marginal entropy as calculated by running average of actions taken. 
+                    self.running_marginal_entropy = tf.placeholder(tf.float32, shape=(), name='running_marginal_entropy')
+
+                    # Get the masked marginal distributions
+                    self.masked_marginal_ph = tf.placeholder(dtype=tf.float32, shape=(self.n_batch, None), name="masked_marginal_ph")
+
+                    # If using a update schedule for updated mutual information coefficient, capture it here 
+                    self.updated_mut_inf_coef = tf.placeholder(tf.float32, shape=(), name='updated_mut_inf_coef')
+                    self.updated_ent_coef = tf.placeholder(tf.float32, shape=(), name='updated_ent_coef')
+
+                    if(self.marginal_type == "window"):
+                        #logits = tf.multiply(self.running_marginal_entropy, train_model.action_mask_ph)
+                        logits = self.masked_marginal_ph
+                    else:
+                        logits = tf.multiply(self.marginal_ph, train_model.action_mask_ph)
+                        
+                    a_0 = logits - tf.reduce_max(logits, axis=-1, keepdims=True)
+                    exp_a_0 = tf.exp(a_0)
+                    exp_a_0 = tf.multiply(exp_a_0, train_model.action_mask_ph)
+                    z_0 = tf.reduce_sum(exp_a_0, axis=-1, keepdims=True)
+                    p_0 = exp_a_0 / z_0
+                    self.marginal_entropy = tf.reduce_sum(p_0 * (tf.log(z_0) - a_0), axis=-1)
+                    
+                    # original loss: loss = self.pg_loss - self.entropy * self.ent_coef + self.vf_loss * self.vf_coef
+                    # v1 loss: self.pg_loss - ((self.marginal_entropy - self.entropy) * self.updated_mut_inf_coef) + self.vf_loss * self.vf_coef
+
+                    marginal = self.marginal_entropy * self.updated_mut_inf_coef
+                    entropy = self.entropy * self.updated_ent_coef
+                    loss = self.pg_loss + (marginal - entropy) + self.vf_loss * self.vf_coef
+
+                    #tf.summary.scalar('marginal entropy', self.marginal_entropy)
+                    tf.summary.scalar('running marginal entropy', self.running_marginal_entropy)
+                    tf.summary.scalar('updated_mut_inf_coef', self.updated_mut_inf_coef)
+                    tf.summary.scalar('updated_ent_coef', self.updated_ent_coef)
+                    #tf.summary.scalar('marginal', self.marginal_ph)
                     tf.summary.scalar('entropy_loss', self.entropy)
                     tf.summary.scalar('policy_gradient_loss', self.pg_loss)
                     tf.summary.scalar('value_function_loss', self.vf_loss)
-                    tf.summary.scalar('loss', loss)
+                    #tf.summary.scalar('loss', loss)
 
                     self.params = tf_util.get_trainable_vars("model")
+
                     grads = tf.gradients(loss, self.params)
                     if self.max_grad_norm is not None:
                         grads, _ = tf.clip_by_global_norm(grads, self.max_grad_norm)
@@ -170,6 +240,7 @@ class A2C(ActorCriticRLModel):
                     tf.summary.scalar('discounted_rewards', tf.reduce_mean(self.rewards_ph))
                     tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
                     tf.summary.scalar('advantage', tf.reduce_mean(self.advs_ph))
+                    tf.summary.scalar('marginal', tf.reduce_mean(self.marginal_ph))
                     if self.full_tensorboard_log:
                         tf.summary.histogram('discounted_rewards', self.rewards_ph)
                         tf.summary.histogram('learning_rate', self.learning_rate_ph)
@@ -208,15 +279,46 @@ class A2C(ActorCriticRLModel):
         :param writer: (TensorFlow Summary.writer) the writer for tensorboard
         :return: (float, float, float) policy loss, value loss, policy entropy
         """
+
+        if isinstance(self.env.action_space, gym.spaces.Discrete):
+            for action in actions:
+                self.action_history[action] += 1
+                self.running_marginal = self.action_history / np.sum(self.action_history)
+
+        mut_inf_coef = self.mut_inf_coef 
+        if(self.mut_schedule != 'constant'):
+            if(self.marginal_reverse):
+                if(self.mut_inf_coef < self.init_mut_coef):
+                    mut_inf_coef += self.mut_schedule
+            else:
+                mut_inf_coef = self.mut_inf_coef * (1 - self.mut_schedule)
+
+        self.mut_inf_coef = mut_inf_coef
         advs = rewards - values
         cur_lr = None
         for _ in range(len(obs)):
             cur_lr = self.learning_rate_schedule.value()
-        assert cur_lr is not None, "Error: the observation input array cannon be empty"
+        assert cur_lr is not None, "Error: the observation input array cannon be empty" 
 
-        td_map = {self.train_model.obs_ph: obs, self.actions_ph: actions, self.advs_ph: advs,
-                  self.train_model.action_mask_ph: action_masks,
-                  self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
+        masked_marginals = []
+        for action_mask in action_masks:
+            masked_marginal = self.running_marginal * action_mask
+            masked_marginal /= np.sum(masked_marginal)
+            masked_marginals.append(masked_marginal)
+
+        marginal_nn = self.train_model.marginal_approximation(obs=obs, state=states, mask=action_masks, action_mask=action_masks)
+
+        td_map = {  self.train_model.obs_ph: obs, 
+                    self.actions_ph: actions, 
+                    self.advs_ph: advs,
+                    self.train_model.action_mask_ph: action_masks, 
+                    self.marginal_ph : marginal_nn, 
+                    self.rewards_ph: rewards, 
+                    self.running_marginal_entropy : entropy(self.running_marginal),
+                    self.masked_marginal_ph : masked_marginals,
+                    self.updated_mut_inf_coef : self.mut_inf_coef,
+                    self.updated_ent_coef : self.ent_coef,
+                    self.learning_rate_ph: cur_lr}
         if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
@@ -226,22 +328,22 @@ class A2C(ActorCriticRLModel):
             if self.full_tensorboard_log and (1 + update) % 10 == 0:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop],
+                summary, policy_loss, value_loss, marginal_loss, policy_entropy, _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.marginal_loss, self.entropy, self.apply_backprop],
                     td_map, options=run_options, run_metadata=run_metadata)
                 writer.add_run_metadata(run_metadata, 'step%d' % (update * self.n_batch))
             else:
-                summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                    [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
+                summary, policy_loss, value_loss, marginal_loss, policy_entropy, _ = self.sess.run(
+                    [self.summary, self.pg_loss, self.vf_loss, self.marginal_loss, self.entropy, self.apply_backprop], td_map)
             writer.add_summary(summary, update * self.n_batch)
 
         else:
-            policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map)
+            policy_loss, value_loss, marginal_loss, policy_entropy, _ = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.marginal_loss, self.entropy, self.apply_backprop], td_map)
 
-        return policy_loss, value_loss, policy_entropy
+        return policy_loss, value_loss, marginal_loss, policy_entropy
 
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="A2C",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="CLA2C",
               reset_num_timesteps=True):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
@@ -271,7 +373,7 @@ class A2C(ActorCriticRLModel):
                     break
 
                 self.ep_info_buf.extend(ep_infos)
-                _, value_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values, action_masks,
+                _, value_loss, marginal_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values, action_masks,
                                                                  self.num_timesteps // self.n_batch, writer)
                 n_seconds = time.time() - t_start
                 fps = int((update * self.n_batch) / n_seconds)
@@ -290,6 +392,7 @@ class A2C(ActorCriticRLModel):
                     logger.record_tabular("fps", fps)
                     logger.record_tabular("policy_entropy", float(policy_entropy))
                     logger.record_tabular("value_loss", float(value_loss))
+                    logger.record_tabular("marginal_loss", float(marginal_loss))
                     logger.record_tabular("explained_variance", float(explained_var))
                     if len(self.ep_info_buf) > 0 and len(self.ep_info_buf[0]) > 0:
                         logger.logkv('ep_reward_mean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
@@ -304,7 +407,7 @@ class A2C(ActorCriticRLModel):
             "gamma": self.gamma,
             "n_steps": self.n_steps,
             "vf_coef": self.vf_coef,
-            "ent_coef": self.ent_coef,
+            "mut_inf_coef": self.mut_inf_coef,
             "max_grad_norm": self.max_grad_norm,
             "learning_rate": self.learning_rate,
             "alpha": self.alpha,
@@ -326,17 +429,24 @@ class A2C(ActorCriticRLModel):
         self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
 
 
-class A2CRunner(AbstractEnvRunner):
+    def observe_action(self, obs, states, rewards, masks, actions, values, action_masks, update, agent, writer=None):
+
+        # Input: Train step information from another agent. 
+        # Output: Updated state
+
+        return 
+        
+class CLA2CRunner(AbstractEnvRunner):
     def __init__(self, env, model, n_steps=5, gamma=0.99):
         """
-        A runner to learn the policy of an environment for an a2c model
+        A runner to learn the policy of an environment for an cla2c model
 
         :param env: (Gym environment) The environment to learn from
         :param model: (Model) The model to learn
         :param n_steps: (int) The number of steps to run for each environment
         :param gamma: (float) Discount factor
         """
-        super(A2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
+        super(CLA2CRunner, self).__init__(env=env, model=model, n_steps=n_steps)
         self.gamma = gamma
 
     def _run(self):
@@ -350,7 +460,6 @@ class A2CRunner(AbstractEnvRunner):
         mb_states = self.states
         ep_infos = []
         for _ in range(self.n_steps):
-            
             # Added for hanabi environment 
             try:
                 self.action_masks = self.env.env_method("valid_actions")
@@ -358,6 +467,7 @@ class A2CRunner(AbstractEnvRunner):
                 pass # if this is not a hanabi environment we may not have this envirnoment method  
 
             actions, values, states, _ = self.model.step(self.obs, self.states, self.dones, action_mask=self.action_masks)
+
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_values.append(values)
@@ -377,17 +487,12 @@ class A2CRunner(AbstractEnvRunner):
                 if maybe_ep_info is not None:
                     ep_infos.append(maybe_ep_info)
 
-                # actoin mask
-                # env_action_mask = info.get('action_mask')
-
                 # Added for Hanabi Env
                 try:
                     env_action_mask = self.env.env_method("valid_actions")
                 except:
                     env_action_mask = info.get('action_mask')
                 
-                self.action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
-
                 self.action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
 
             if self.callback is not None:

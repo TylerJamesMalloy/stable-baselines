@@ -109,6 +109,17 @@ class ProbabilityDistributionType(object):
         """
         raise NotImplementedError
 
+    def marginal_distribution_from_latent(self, phi_latent_vector, init_scale=1.0, init_bias=0.0):
+        """
+        returns the marginal probability distribution from latent values
+
+        :param phi_latent_vector: ([float]) the latent phi values
+        :param init_scale: (float) the initial scale of the distribution
+        :param init_bias: (float) the initial bias of the distribution
+        :return: (ProbabilityDistribution) the instance of the ProbabilityDistribution associated
+        """
+        raise NotImplementedError
+
     def param_shape(self):
         """
         returns the shape of the input parameters
@@ -171,6 +182,9 @@ class CategoricalProbabilityDistributionType(ProbabilityDistributionType):
         q_values = linear(vf_latent_vector, 'q', self.n_cat, init_scale=init_scale, init_bias=init_bias)
         return self.proba_distribution_from_flat(pdparam), pdparam, q_values
 
+    def marginal_distribution_from_latent(self, phi_latent_vector, init_scale=1.0, init_bias=0.0):
+        return linear(phi_latent_vector, 'phi', self.n_cat, init_scale=init_scale, init_bias=init_bias)
+
     def param_shape(self):
         return [self.n_cat]
 
@@ -203,6 +217,9 @@ class MultiCategoricalProbabilityDistributionType(ProbabilityDistributionType):
         pdparam = linear(pi_latent_vector, 'pi', sum(self.n_vec), init_scale=init_scale, init_bias=init_bias)
         q_values = linear(vf_latent_vector, 'q', sum(self.n_vec), init_scale=init_scale, init_bias=init_bias)
         return self.proba_distribution_from_flat(pdparam), pdparam, q_values
+    
+    def marginal_distribution_from_latent(self, phi_latent_vector, init_scale=1.0, init_bias=0.0):
+        return linear(phi_latent_vector, 'phi', sum(self.n_vec), init_scale=init_scale, init_bias=init_bias)
 
     def param_shape(self):
         return [sum(self.n_vec)]
