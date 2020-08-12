@@ -66,7 +66,7 @@ class CLA2C(ActorCriticRLModel):
 
     def __init__(self, policy, env, gamma=0.99, n_steps=5, vf_coef=0.25, mut_inf_coef=0.1, ent_coef=0.01, max_grad_norm=0.5,
                  learning_rate=7e-4, alpha=0.99, epsilon=1e-5, lr_schedule='constant', mut_schedule='constant', verbose=0,
-                 tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, marginal_kwargs=None,
+                 tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, marginal_kwargs=None, agent_id=0,
                  full_tensorboard_log=False, seed=None, n_cpu_tf_sess=None, marginal_type="window", marginal_reverse=False):
 
         self.n_steps = n_steps
@@ -113,6 +113,9 @@ class CLA2C(ActorCriticRLModel):
         self.marginal_entropy = None
         self.marginal_ph = None
         self.marginal_loss = None
+
+        self.maw = MultiAgentWindow(env=env, model=self, n_steps=n_steps, gamma=gamma)
+        self.agent_id = agent_id
 
         if(marginal_reverse == True):
             self.mut_inf_coef = 0
@@ -343,8 +346,7 @@ class CLA2C(ActorCriticRLModel):
 
         return policy_loss, value_loss, marginal_loss, policy_entropy
 
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="CLA2C",
-              reset_num_timesteps=True):
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="CLA2C", reset_num_timesteps=False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -428,13 +430,161 @@ class CLA2C(ActorCriticRLModel):
 
         self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
 
+    def model(self):
+        return self.model
+    
+    def train_step_multi(self, obs, states, dones, rewards, masks, actions, action_masks, update, infos, agent_id, writer=None, reset_num_timesteps=False):
+        
+        # Find out a way to not redo this every time 
+        self._setup_learn()
+        self.learning_rate_schedule = Scheduler(initial_value=self.learning_rate, n_values=self.n_steps, schedule=self.lr_schedule)
 
-    def observe_action(self, obs, states, rewards, masks, actions, values, action_masks, update, agent, writer=None):
+        if(agent_id == self.agent_id):
+            # Add the training step to recent window, when full use as a training iteration on all networks. 
+            actions, values, states, neglogop = self.step(obs, states, dones, action_mask=action_masks)
+            self.maw.step(obs, states, values, rewards, dones, masks, actions, action_masks, update, infos)
+        else:
+            # What is known about the state that the other agent observes? 
+            # List all possible states 
+            # Which state is most likely in relation to their action
+            # Update beliefs based on this. 
+            return 
 
-        # Input: Train step information from another agent. 
-        # Output: Updated state
+        self.num_timesteps += self.n_envs
+
+        if(self.maw.is_full()):
+            new_tb_log = self._init_num_timesteps(reset_num_timesteps)
+            with SetVerbosity(self.verbose), TensorboardWriter(self.graph, self.tensorboard_log, "CLA2C", new_tb_log) \
+                    as writer:
+                    
+                obs, states, rewards, masks, actions, values, ep_infos, true_reward, action_masks = self.maw.get_rollout()
+                policy_loss, value_loss, marginal_loss, policy_entropy = self._train_step(obs, states, rewards, masks, actions, values, action_masks, self.num_timesteps // self.n_batch, writer)
+
+            self.maw.clear()
 
         return 
+
+##
+class MultiAgentWindow():
+    def __init__(self, env, model, n_steps, gamma):
+        self.mb_obs = []
+        self.mb_actions = []
+        self.mb_values = []
+        self.mb_dones = []
+        self.mb_action_masks = []
+        self.ep_infos = []
+        self.mb_rewards = []
+        self.mb_states = []
+
+        self.gamma = gamma
+        self.states = None
+
+        self.env = env
+        self.model = model
+        n_envs = env.num_envs
+        self.batch_ob_shape = (n_envs * n_steps,) + env.observation_space.shape
+        self.obs = np.zeros((n_envs,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
+        self.obs[:] = env.reset()
+        self.n_steps = n_steps
+        self.states = model.initial_state
+        self.dones = [False for _ in range(n_envs)]
+        self.callback = None  # type: Optional[BaseCallback]
+        self.continue_training = True
+        self.n_envs = n_envs
+
+        self.action_masks = []
+        
+    
+    def step(self, obs, states, values, rewards, dones, masks, actions, action_masks, update, infos):
+        self.mb_obs.append(np.copy(obs))
+        self.mb_actions.append(actions)
+        self.mb_values.append(values) 
+        self.mb_dones.append(dones)
+        self.mb_action_masks.append(action_masks.copy())
+        self.ep_infos = []
+        self.mb_rewards.append(rewards)
+        self.update = update
+
+        self.obs = obs
+        self.states = states
+        self.dones = dones
+
+        for info in infos:
+            maybe_ep_info = info.get('episode')
+            if maybe_ep_info is not None:
+                self.ep_infos.append(maybe_ep_info)
+
+            # Added for Hanabi Env
+            try:
+                env_action_mask = self.env.env_method("valid_actions")
+            except:
+                env_action_mask = info.get('action_mask')
+            
+            self.action_masks.append(flatten_action_mask(self.env.action_space, env_action_mask))
+    
+    def clear(self):
+        self.mb_obs = []
+        self.mb_actions = []
+        self.mb_values = []
+        self.mb_dones = []
+        self.mb_action_masks = []
+        self.ep_infos = []
+        self.mb_rewards = []
+    
+    def len(self):
+        return(len(self.mb_obs))
+    
+    def is_full(self):
+        return len(self.mb_obs) == self.n_steps
+    
+    def get_rollout(self):
+        mb_masks = []
+        ep_infos  = []
+        true_rewards = []
+
+        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_action_masks = [], [], [], [], [], []
+
+        mb_states = self.states
+
+        try:
+            self.action_masks = self.env.env_method("valid_actions")
+        except:
+            pass # if this is not a hanabi environment we may not have this envirnoment method  
+        
+        self.mb_dones.append(self.dones)
+        # batch of steps to batch of rollouts
+        mb_obs = np.asarray(self.mb_obs, dtype=self.env.observation_space.dtype).swapaxes(1, 0).reshape(self.batch_ob_shape)
+        mb_rewards = np.asarray(self.mb_rewards, dtype=np.float32).swapaxes(0, 1)
+        mb_actions = np.asarray(self.mb_actions, dtype=self.env.action_space.dtype).swapaxes(0, 1)
+        mb_values = np.asarray(self.mb_values, dtype=np.float32).swapaxes(0, 1)
+        mb_dones = np.asarray(self.mb_dones, dtype=np.bool).swapaxes(0, 1)
+        mb_action_masks = np.asarray(self.mb_action_masks, dtype=np.float32).swapaxes(0, 1)
+        mb_masks = mb_dones[:, :-1]
+        mb_dones = mb_dones[:, 1:]
+        true_rewards = np.copy(mb_rewards)
+        last_values = self.model.value(self.obs, self.states, self.dones).tolist()
+        # discount/bootstrap off value fn
+        for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
+            rewards = rewards.tolist()
+            dones = dones.tolist()
+            if dones[-1] == 0:
+                rewards = discount_with_dones(rewards + [value], dones + [0], self.gamma)[:-1]
+            else:
+                rewards = discount_with_dones(rewards, dones, self.gamma)
+
+            mb_rewards[n] = rewards
+
+        # convert from [n_env, n_steps, ...] to [n_steps * n_env, ...]
+        mb_rewards = mb_rewards.reshape(-1, *mb_rewards.shape[2:])
+        mb_actions = mb_actions.reshape(-1, *mb_actions.shape[2:])
+        mb_values = mb_values.reshape(-1, *mb_values.shape[2:])
+        mb_masks = mb_masks.reshape(-1, *mb_masks.shape[2:])
+        mb_action_masks = mb_action_masks.reshape(-1, *mb_action_masks.shape[2:])
+        true_rewards = true_rewards.reshape(-1, *true_rewards.shape[2:])
+
+
+        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, ep_infos, true_rewards, mb_action_masks
+
         
 class CLA2CRunner(AbstractEnvRunner):
     def __init__(self, env, model, n_steps=5, gamma=0.99):
