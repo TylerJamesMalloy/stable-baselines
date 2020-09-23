@@ -74,7 +74,7 @@ class CLAC(OffPolicyRLModel):
     """
     def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=1000000,
                  learning_rate_phi=2e-3, learning_starts=100, train_freq=1, batch_size=256,
-                 tau=0.005, mut_inf_coef='auto', target_update_interval=1,
+                 tau=0.005, mut_inf_coef='auto', target_update_interval=1, coef_schedule=None,
                  gradient_steps=1, target_entropy='auto', verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
                  seed=None, n_cpu_tf_sess=None):
@@ -97,6 +97,9 @@ class CLAC(OffPolicyRLModel):
         self.target_update_interval = target_update_interval
         self.gradient_steps = gradient_steps
         self.gamma = gamma
+
+        self.coef_schedule = coef_schedule
+        self.init_mut_inf_coef = self.mut_inf_coef
         
         # Options for MI approximation and related parameters 
         self.learning_rate_phi = learning_rate_phi # Taken from MIRL paper, not altered 
@@ -190,6 +193,8 @@ class CLAC(OffPolicyRLModel):
                     self.logp_phi = tf.placeholder(tf.float32, shape=(None, ), name='logp_phi')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
+                    self.mut_inf_coef_tensor = tf.placeholder(tf.float32, shape= (), name='mut_inf_coef')
+
                 with tf.variable_scope("model", reuse=False):
                     # Create the policy
                     # first return value corresponds to deterministic actions
@@ -268,7 +273,7 @@ class CLAC(OffPolicyRLModel):
                     # Compute the policy loss
                     # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
                     #policy_kl_loss = tf.reduce_mean(self.mut_inf_coef * logp_pi - qf1_pi)
-                    policy_kl_loss = tf.reduce_mean((-1 * self.mut_inf_coef * (self.logp_phi - logp_pi)) - qf1_pi)
+                    policy_kl_loss = tf.reduce_mean((-1 * self.mut_inf_coef_tensor * (self.logp_phi - logp_pi)) - qf1_pi)
 
                     # NOTE: in the original implementation, they have an additional
                     # regularization loss for the gaussian parameters
@@ -282,7 +287,7 @@ class CLAC(OffPolicyRLModel):
                     # previous tests 
                     # v_backup = tf.stop_gradient(min_qf_pi - self.mut_inf_coef * (self.logp_phi - logp_pi))
                     # Minimzing mutual information  
-                    v_backup = tf.stop_gradient(min_qf_pi + (self.mut_inf_coef * (self.logp_phi - logp_pi)))
+                    v_backup = tf.stop_gradient(min_qf_pi + (self.mut_inf_coef_tensor * (self.logp_phi - logp_pi)))
                     value_loss = 0.5 * tf.reduce_mean((value_fn - v_backup) ** 2)
 
                     values_losses = qf1_loss + qf2_loss + value_loss
@@ -388,12 +393,15 @@ class CLAC(OffPolicyRLModel):
             if(len(mu) == 1):
                 mu = mu[0]
 
-            multivar = multivariate_normal(mu, cov)
-            logp_phi = multivar.logpdf(batch_actions) # * -1 
-            logp_phi = logp_phi.reshape(self.batch_size, )
-            #print(np.mean(logp_phi))
-        
-        #print("logp_phi mean", np.mean(logp_phi, axis=0))
+            try:
+                multivar = multivariate_normal(mu, cov)
+                logp_phi = multivar.logpdf(batch_actions) # * -1 
+                logp_phi = logp_phi.reshape(self.batch_size, )
+            except:
+                # Mutual infomration coefficient is too small to contribute anything
+                logp_phi = np.zeros(self.batch_size, )
+
+        mut_inf_coef = self.mut_inf_coef
 
         # If coinrunner environment
         #batch_obs = np.squeeze(batch_obs, axis=1)
@@ -405,7 +413,8 @@ class CLAC(OffPolicyRLModel):
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
             self.learning_rate_ph: learning_rate,
-            self.logp_phi: logp_phi
+            self.logp_phi: logp_phi,
+            self.mut_inf_coef_tensor: mut_inf_coef
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,
@@ -512,11 +521,11 @@ class CLAC(OffPolicyRLModel):
 
                 Model_String = "CLAC"
                 if not self.auto_mut_inf_coef:
-                    Model_String = "CLAC " + str(self.mut_inf_coef)
+                    Model_String = "CLAC " + str(self.init_mut_inf_coef)
                 
                 env_name = self.env.unwrapped.envs[0].spec.id
 
-                mut_inf_coef = self.mut_inf_coef
+                mut_inf_coef = self.init_mut_inf_coef
                 if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
                     mut_inf_coef = "auto"
                 Model_String = "CLAC" + str(mut_inf_coef)
@@ -615,6 +624,16 @@ class CLAC(OffPolicyRLModel):
                         mom_2 = np.square((self.learning_rate_phi * np.diag(act_mu)) + (1 - self.learning_rate_phi)*np.diag(previous_mean))
                         self.multivariate_cov = cov + mom_1 - mom_2 
 
+                    # Update Beta parameter if coef_schedule is set 
+                    if(self.coef_schedule is not None and self.mut_inf_coef > 1e-12):
+                        # (1 - a) B + a(1/L()) # Loss based update schdule, for later 
+                        
+                        # Currently using linear schedule: 
+                        self.mut_inf_coef *= (1 - self.coef_schedule)
+                        
+                    """if(self.num_timesteps % 1000 == 0):
+                        print("updated mut_inf_coef: ", self.mut_inf_coef, " at time step ", self.num_timesteps)"""
+
                 # Store transition in the replay buffer.
                 #print("adding action to replay buffer: ", action)
                 self.replay_buffer.add(obs, action, reward, new_obs, float(done))
@@ -684,7 +703,7 @@ class CLAC(OffPolicyRLModel):
                     
                     env_name = self.env.unwrapped.envs[0].spec.id
 
-                    mut_inf_coef = self.mut_inf_coef
+                    mut_inf_coef = self.init_mut_inf_coef
                     if(type(self.mut_inf_coef) == tf.Tensor or np.isnan(mut_inf_coef)):
                         mut_inf_coef = "auto"
                     Model_String = "CLAC" + str(mut_inf_coef)
@@ -787,9 +806,10 @@ class CLAC(OffPolicyRLModel):
             "n_envs": self.n_envs,
             "n_cpu_tf_sess": self.n_cpu_tf_sess,
             "seed": self.seed,
-            "random_exploration": self.random_exploration,
             "_vectorize_action": self._vectorize_action,
-            "policy_kwargs": self.policy_kwargs
+            "policy_kwargs": self.policy_kwargs,
+            "coef_schedule": self.coef_schedule,
+            "init_mut_inf_coef": self.init_mut_inf_coef
         }
 
         params_to_save = self.get_parameters()
